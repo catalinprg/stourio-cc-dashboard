@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stourio ClaudeCode</title>
+<link rel="icon" href="/static/favicon.svg" type="image/png">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: { mono: ['JetBrains Mono', 'monospace'], sans: ['DM Sans', 'sans-serif'] },
+      colors: { 
+        bg: { 900: '#f4f1e8', 800: '#ffffff', 700: '#f8fafc', 600: '#f1f5f9' } 
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { background: #f4f1e8; color: #334155; font-family: 'DM Sans', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f4f1e8; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  .tab-active { border-bottom: 2px solid #0891b2; color: #0891b2; }
+  .tab-inactive { border-bottom: 2px solid transparent; color: #64748b; }
+  .tab-inactive:hover { color: #334155; }
+  .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .heatmap-cell { border-radius: 2px; width: 12px; height: 12px; }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .fade-in { animation: fadeIn 0.2s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="border-b border-gray-200 px-6 py-4 flex items-center justify-between bg-bg-800 relative">
+  
+  <div class="flex items-center gap-3">
+    <img src="/static/logo.png" alt="Custom Logo" class="h-8 object-contain" onerror="this.outerHTML='<span class=\'font-semibold text-lg tracking-tight text-gray-900\'>Custom Logo Missing</span>'">
+   
+  </div>
+
+  <div class="absolute left-1/2 -translate-x-1/2 flex items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="32" height="32" fill="#d97757">
+      <path d="m146-346-42-42 147-147-147-147 42-42 189 189-189 189Zm254 26v-60h414v60H400Z"/>
+    </svg>
+     <span class="text-gray-400 text-sm mono">Intelligent Live Ops</span>
+  </div>
+
+  <button onclick="refreshAll()" class="text-gray-500 hover:text-cyan-600 transition text-sm mono border border-gray-300 rounded px-3 py-1 hover:border-cyan-600">refresh</button>
+
+</header>
+
+<div class="px-6 py-4 border-b border-gray-200 bg-bg-900 flex gap-4 overflow-x-auto">
+  <div class="card p-4 min-w-[200px] flex-1 bg-bg-800 border-gray-200">
+    <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 pulse"></span> Active Sessions
+    </div>
+    <div class="text-3xl font-bold text-gray-900" id="liveSessions">-</div>
+  </div>
+  <div class="card p-4 min-w-[200px] flex-1 bg-bg-800 border-gray-200">
+    <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2">Live Agents Deployed</div>
+    <div class="text-3xl font-bold text-fuchsia-600" id="liveAgentsCount">-</div>
+  </div>
+  <div class="card p-4 min-w-[200px] flex-1 bg-bg-800 border-gray-200">
+    <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2">Total Live Tools Invoked</div>
+    <div class="text-3xl font-bold text-cyan-600" id="liveToolsCount">-</div>
+  </div>
+</div>
+
+<nav class="border-b border-gray-200 px-6 flex gap-6 text-sm font-medium bg-bg-900">
+  <button onclick="showTab('live_ops')" id="tab-live_ops" class="py-3 tab-active transition">Live Ops (Agents & Tools)</button>
+  <button onclick="showTab('active_sessions')" id="tab-active_sessions" class="py-3 tab-inactive transition">Live Sessions</button>
+  <button onclick="showTab('history')" id="tab-history" class="py-3 tab-inactive transition">History & Stats</button>
+</nav>
+
+<main class="p-6 max-w-[1800px] w-full mx-auto">
+
+<div id="panel-live_ops" class="fade-in">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="flex flex-col gap-4">
+      <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Active Agents</h3>
+      <div id="liveAgentsGrid" class="grid grid-cols-1 gap-4">
+        <div class="text-gray-500 text-sm">Loading active agents...</div>
+      </div>
+    </div>
+    
+    <div class="flex flex-col gap-4">
+      <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Live Tools</h3>
+      <div class="card overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="text-left text-gray-500 text-xs uppercase tracking-wider">
+            <tr class="border-b border-gray-200 bg-bg-700">
+              <th class="px-4 py-3">Tool Name</th>
+              <th class="px-4 py-3">Project</th>
+              <th class="px-4 py-3 text-right">Session ID</th>
+              <th class="px-4 py-3 text-right">Invoked</th>
+            </tr>
+          </thead>
+          <tbody id="liveToolsBody" class="mono text-xs"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="panel-active_sessions" class="hidden fade-in">
+  <div class="card overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="text-left text-gray-500 text-xs uppercase tracking-wider">
+        <tr class="border-b border-gray-200 bg-bg-700">
+          <th class="px-4 py-3">Session ID</th>
+          <th class="px-4 py-3">Project</th>
+          <th class="px-4 py-3">Model</th>
+          <th class="px-4 py-3 text-right">Duration</th>
+          <th class="px-4 py-3 text-right">Tokens</th>
+          <th class="px-4 py-3 text-right">Tools</th>
+        </tr>
+      </thead>
+      <tbody id="activeSessionsBody" class="mono text-xs"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="panel-history" class="hidden fade-in">
+  <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Historical Global Overview</h3>
+  
+  <div class="flex gap-4 mb-6 overflow-x-auto" id="historyCards">
+    <div class="text-gray-500 text-sm">Loading history stats...</div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card p-4 col-span-1">
+      <h4 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Model Distribution</h4>
+      <div class="relative h-[220px]"><canvas id="modelChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card p-4 mb-6">
+    <h4 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Activity Heatmap (Sessions)</h4>
+    <div id="heatmapContainer"></div>
+  </div>
+</div>
+
+</main>
+
+<script>
+let charts = {};
+
+function fmt(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function timeSince(iso) {
+  if (!iso) return '-';
+  const seconds = Math.floor((new Date() - new Date(iso)) / 1000);
+  if (seconds < 60) return seconds + 's ago';
+  const minutes = Math.floor(seconds / 60);
+  return minutes + 'm ago';
+}
+
+function shortModel(m) {
+  if (!m) return '-';
+  return m.replace('claude-', '').replace('-20250514', '').replace('-20250918', '');
+}
+
+function showTab(name) {
+  ['live_ops', 'active_sessions', 'history'].forEach(t => {
+    document.getElementById('panel-' + t).classList.toggle('hidden', t !== name);
+    document.getElementById('tab-' + t).className = t === name ? 'py-3 tab-active transition' : 'py-3 tab-inactive transition';
+  });
+}
+
+function renderDonut(canvasId, data, colors, labels) {
+  if (charts[canvasId]) charts[canvasId].destroy();
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#ffffff' }] },
+    options: {
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#64748b', font: { size: 11, family: 'JetBrains Mono' }, padding: 12 } }
+      }
+    }
+  });
+}
+
+function renderHeatmap(dailySessions) {
+  const container = document.getElementById('heatmapContainer');
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(start.getDate() - 364);
+
+  const vals = Object.values(dailySessions);
+  const maxVal = vals.length > 0 ? Math.max(...vals, 1) : 1;
+
+  let html = '<div class="flex gap-[3px] flex-wrap">';
+  for (let i = 0; i <= 364; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    const count = dailySessions[key] || 0;
+    const intensity = count / maxVal;
+    let bg;
+    // Inverted heatmap colors for light theme
+    if (count === 0) bg = '#e2e8f0';
+    else if (intensity < 0.25) bg = '#cffafe';
+    else if (intensity < 0.5) bg = '#67e8f9';
+    else if (intensity < 0.75) bg = '#06b6d4';
+    else bg = '#0891b2';
+    html += `<div class="heatmap-cell" style="background:${bg}" title="${key}: ${count} sessions"></div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function loadDashboard() {
+  const [statsRes, sessionsRes] = await Promise.all([
+    fetch('/api/stats'),
+    fetch('/api/sessions?status=active&limit=100')
+  ]);
+  const stats = await statsRes.json();
+  const sessionsData = await sessionsRes.json();
+
+  const ops = stats.live_ops;
+  document.getElementById('liveSessions').textContent = ops.active_sessions;
+  document.getElementById('liveAgentsCount').textContent = ops.active_agents_count;
+  document.getElementById('liveToolsCount').textContent = ops.active_tools;
+
+  const grid = document.getElementById('liveAgentsGrid');
+  if (ops.active_agents.length === 0) {
+    grid.innerHTML = '<div class="text-gray-500 text-sm">No agents actively running right now.</div>';
+  } else {
+    grid.innerHTML = ops.active_agents.map(a => `
+      <div class="card p-4 border-l-4 border-l-fuchsia-500 hover:bg-bg-700 transition fade-in">
+        <div class="flex justify-between items-start mb-2">
+          <div class="text-fuchsia-600 font-mono font-bold text-sm truncate pr-2" title="${a.agent_id}">${a.agent_id}</div>
+          <div class="text-xs text-gray-400 shrink-0">${timeSince(a.timestamp)}</div>
+        </div>
+        <div class="text-gray-500 text-xs uppercase mb-1 truncate">${a.project} <span class="text-gray-400 ml-2 mono">ID: ${a.session_id}</span></div>
+        <div class="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">${a.task || 'Executing task...'}</div>
+      </div>
+    `).join('');
+  }
+
+  const toolsBody = document.getElementById('liveToolsBody');
+  if (ops.active_tools_list.length === 0) {
+    toolsBody.innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-gray-500">No tools active.</td></tr>';
+  } else {
+    toolsBody.innerHTML = ops.active_tools_list.map(t => `
+      <tr class="border-b border-gray-200 hover:bg-bg-700 fade-in">
+        <td class="px-4 py-2.5 text-cyan-600 font-bold">${t.name}</td>
+        <td class="px-4 py-2.5 text-gray-600">${t.project}</td>
+        <td class="px-4 py-2.5 text-right text-gray-400 mono">${t.session}</td>
+        <td class="px-4 py-2.5 text-right text-gray-500">${timeSince(t.timestamp)}</td>
+      </tr>
+    `).join('');
+  }
+
+  const sessionBody = document.getElementById('activeSessionsBody');
+  if (sessionsData.sessions.length === 0) {
+    sessionBody.innerHTML = '<tr><td colspan="6" class="px-4 py-4 text-gray-500">No active sessions.</td></tr>';
+  } else {
+    sessionBody.innerHTML = sessionsData.sessions.map(s => `
+      <tr class="border-b border-gray-200 hover:bg-bg-700 fade-in">
+        <td class="px-4 py-2.5 text-gray-500 mono">${s.session_id.substring(0,8)}</td>
+        <td class="px-4 py-2.5 text-cyan-600">${s.project}</td>
+        <td class="px-4 py-2.5 text-gray-600 truncate" title="${s.model}">${s.model.replace('claude-', '')}</td>
+        <td class="px-4 py-2.5 text-right mono text-gray-600">${s.duration_display}</td>
+        <td class="px-4 py-2.5 text-right mono text-gray-600">${fmt(s.tokens.total)}</td>
+        <td class="px-4 py-2.5 text-right mono text-gray-600">${s.tool_call_count}</td>
+      </tr>
+    `).join('');
+  }
+
+  const o = stats.overview;
+  const totalEvents = o.total_messages + o.total_tool_calls + stats.agent_teams.total_dispatches;
+  const totalAgents = Object.keys(stats.agent_teams.agents).length;
+
+  document.getElementById('historyCards').innerHTML = [
+    { label: 'Tokens Used', value: fmt(o.total_tokens), color: 'text-purple-600' },
+    { label: 'Total Events', value: fmt(totalEvents), color: 'text-cyan-600' },
+    { label: 'Tools Used', value: fmt(o.total_tool_calls), color: 'text-emerald-600' },
+    { label: 'Agents', value: fmt(totalAgents), color: 'text-fuchsia-600' },
+    { label: 'Sessions', value: fmt(o.total_sessions), color: 'text-yellow-600' },
+  ].map(c => `
+    <div class="card p-4 min-w-[200px] flex-1 bg-bg-800 border-gray-200 fade-in">
+      <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2">${c.label}</div>
+      <div class="text-3xl font-bold ${c.color}">${c.value}</div>
+    </div>
+  `).join('');
+
+  const modelLabels = Object.keys(stats.models.counts).map(shortModel);
+  const modelData = Object.values(stats.models.counts);
+  const modelColors = ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
+  renderDonut('modelChart', modelData, modelColors.slice(0, modelData.length), modelLabels);
+  renderHeatmap(stats.daily.sessions);
+}
+
+function refreshAll() { loadDashboard(); }
+
+loadDashboard();
+setInterval(loadDashboard, 30000);
+</script>
+</body>
+</html>

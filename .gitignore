@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment and IDEs
+.env
+venv/
+env/
+.venv/
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local config
+.claude/
