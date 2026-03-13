@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .scanner import SessionScanner
 from .config import load_settings, save_settings, MODEL_PRICING
 from .parser import parse_session_events
+from .resources import get_all_resources
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -97,6 +98,11 @@ async def get_session_events(session_id: str):
 @app.get("/api/stats")
 async def get_stats():
     return scanner.get_stats()
+
+
+@app.get("/api/resources")
+async def get_resources():
+    return get_all_resources()
 
 
 @app.get("/api/projects")

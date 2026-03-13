@@ -22,6 +22,12 @@ Real-time view of what Claude Code is doing right now — active agents with the
 ### 📡 Live Sessions
 Table of all currently active sessions with project, model, duration, token usage, and tool call counts at a glance.
 
+### 🛠️ Resources
+A dynamically updated library of all your installed Claude Code capabilities, organized into three columns:
+- **Agents** — specialized workflow agents
+- **Skills** — custom user commands and installed plugin tools
+- **MCP Servers** — Model Context Protocol active servers
+
 ### 📊 History & Stats
 - **Overview cards** — total tokens, events, tool calls, unique agents, and session counts across all history
 - **Model distribution** — doughnut chart showing which models are used most
@@ -135,6 +141,7 @@ find ~/.claude/projects -type f -name "*.jsonl" -delete
 | `/api/sessions` | `GET` | List sessions — supports `q`, `project`, `model`, `status`, `sort`, `limit`, `offset` |
 | `/api/sessions/:id` | `GET` | Single session detail |
 | `/api/sessions/:id/events` | `GET` | Raw parsed events for a session |
+| `/api/resources` | `GET` | Installed Claude Code MCPs, Agents, and Skills |
 | `/api/stats` | `GET` | Aggregate stats: overview, live ops, daily/hourly breakdown, projects, agent teams |
 | `/api/projects` | `GET` | Per-project metrics |
 | `/api/settings` | `GET` | Dashboard settings + available models |
