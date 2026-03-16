@@ -27,11 +27,7 @@ tailwind.config = {
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #0e1018; }
   ::-webkit-scrollbar-thumb { background: #2a2d42; border-radius: 3px; }
-  .tab-active { border-bottom: 2px solid #38bdf8; color: #38bdf8; }
-  .tab-inactive { border-bottom: 2px solid transparent; color: #7a88a4; }
-  .tab-inactive:hover { color: #c8d4e8; }
   .card { background: #161926; border: 1px solid #252840; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-  .heatmap-cell { border-radius: 2px; width: 12px; height: 12px; }
   .pulse { animation: pulse 2s infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   .fade-in { animation: fadeIn 0.2s ease-out; }
@@ -64,13 +60,25 @@ tailwind.config = {
   .text-cyan-700 { color: #22d3ee !important; }
   .text-cyan-600 { color: #22d3ee !important; }
   .text-emerald-700 { color: #34d399 !important; }
+  /* Skeleton shimmer */
+  .skeleton { background: linear-gradient(90deg, #1c1f30 25%, #252840 50%, #1c1f30 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  /* Filter inputs */
+  .filter-input { background: #1c1f30; border: 1px solid #2a2d42; border-radius: 6px; color: #c8d4e8; font-size: 13px; padding: 6px 10px; outline: none; transition: border-color 0.15s; }
+  .filter-input:focus { border-color: #38bdf8; }
+  .filter-input::placeholder { color: #4a5568; }
+  /* Detail tabs */
+  .detail-tab { font-size: 11px; padding-bottom: 8px; border-bottom: 2px solid transparent; color: #7a88a4; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; }
+  .detail-tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+  /* Compare bar */
+  #compare-bar { transition: transform 0.2s; }
 </style>
 </head>
 <body class="min-h-screen">
 
 <header class="border-b border-gray-200 px-6 py-4 flex items-center justify-between bg-bg-800 relative">
   <div class="flex items-center gap-3">
-    <img src="/static/logo.png" alt="Custom Logo" class="h-8 object-contain" onerror="this.outerHTML='<span class=\'font-semibold text-lg tracking-tight text-gray-900\'>Custom Logo Missing</span>'">
+    <img src="/static/logo.png" alt="Custom Logo" class="h-8 object-contain" onerror="this.outerHTML='<span class=\'font-semibold text-lg tracking-tight text-gray-900\'>Stourio</span>'">
   </div>
   <div class="absolute left-1/2 -translate-x-1/2 flex items-center">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="32" height="32" fill="#d97757">
@@ -79,6 +87,7 @@ tailwind.config = {
     <span class="text-gray-400 text-sm mono">Intelligent Live Ops</span>
   </div>
   <div class="flex items-center gap-2">
+    <span id="ws-indicator" class="text-[10px] mono px-2 py-1 rounded" style="background:#1c1f30;color:#505870;border:1px solid #252840">⬤ poll</span>
     <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer" class="text-gray-500 hover:text-fuchsia-400 transition text-sm mono border border-gray-300 rounded px-3 py-1 hover:border-fuchsia-400">usage ↗</a>
     <button onclick="refreshAll()" class="text-gray-500 hover:text-cyan-400 transition text-sm mono border border-gray-300 rounded px-3 py-1 hover:border-cyan-400">refresh</button>
   </div>
@@ -91,6 +100,7 @@ tailwind.config = {
   <button onclick="showTab('live_ops')" id="tab-live_ops" class="sidebar-item active">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="2" fill="currentColor"/><circle cx="6.5" cy="6.5" r="4" stroke="currentColor" stroke-width="1" opacity="0.5"/><circle cx="6.5" cy="6.5" r="5.8" stroke="currentColor" stroke-width="0.8" opacity="0.25"/></svg>
     Live Ops
+    <span id="sidebar-live-badge" class="hidden ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded" style="background:rgba(52,211,153,0.15);color:#34d399">0</span>
   </button>
   <button onclick="showTab('session_history')" id="tab-session_history" class="sidebar-item">
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="5" r="3.5" stroke="currentColor" stroke-width="1.2"/><path d="M3 9.5 Q6.5 12.5 10 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/><line x1="6.5" y1="1.5" x2="6.5" y2="5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><line x1="6.5" y1="5" x2="8.5" y2="6.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
@@ -111,54 +121,71 @@ tailwind.config = {
 <!-- LIVE OPS TAB -->
 <div id="panel-live_ops" class="fade-in">
 
+  <!-- Context Alert -->
+  <div id="context-alert" class="hidden mb-4 p-3 rounded-lg flex items-center gap-3" style="background:#2a1a0e;border:1px solid #92400e">
+    <span style="color:#f59e0b;font-size:16px">⚠</span>
+    <span id="context-alert-text" class="text-sm" style="color:#fcd34d"></span>
+    <button onclick="document.getElementById('context-alert').classList.add('hidden')" class="ml-auto text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
+  </div>
+
   <!-- KPI Cards -->
-  <div class="flex gap-4 overflow-x-auto mb-6">
-    <div class="card p-4 min-w-[150px] flex-1 bg-bg-800 border-gray-200">
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="card p-4 bg-bg-800 border-gray-200">
       <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500 pulse"></span>
         Active Sessions
         <span class="ml-auto kpi-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="2" width="14" height="12" rx="2" stroke="#64748b" stroke-width="1.4"/><line x1="1" y1="6" x2="15" y2="6" stroke="#64748b" stroke-width="1.4"/><polyline points="3.5,9.5 5.5,11.5 3.5,13.5" stroke="#64748b" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="13.5" x2="11" y2="13.5" stroke="#64748b" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="12" rx="2" stroke="#64748b" stroke-width="1.4"/><line x1="1" y1="6" x2="15" y2="6" stroke="#64748b" stroke-width="1.4"/><polyline points="3.5,9.5 5.5,11.5 3.5,13.5" stroke="#64748b" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="13.5" x2="11" y2="13.5" stroke="#64748b" stroke-width="1.4" stroke-linecap="round"/></svg>
         </span>
       </div>
-      <div class="text-3xl font-bold text-gray-900" id="liveSessions">-</div>
+      <div class="text-3xl font-bold text-gray-900" id="liveSessions">
+        <span class="skeleton block h-8 w-8"></span>
+      </div>
     </div>
-    <div class="card p-4 min-w-[150px] flex-1 bg-bg-800 border-gray-200">
+    <div class="card p-4 bg-bg-800 border-gray-200">
       <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
         Live Agents
         <span class="ml-auto kpi-icon">
           <svg width="16" height="16" viewBox="0 0 11 8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path fill="#D57858" d="M1 0h9v2h1v4H10v2H9V6H8v2H7V6H4v2H3V6H2v2H1V6H0V2h1V0z M2 2h1v1H2V2z M8 2h1v1H8V2z" fill-rule="evenodd"/></svg>
         </span>
       </div>
-      <div class="text-3xl font-bold text-fuchsia-600" id="liveAgentsCount">-</div>
+      <div class="text-3xl font-bold" id="liveAgentsCount" style="color:#f97316">
+        <span class="skeleton block h-8 w-8"></span>
+      </div>
     </div>
-    <div class="card p-4 min-w-[150px] flex-1 bg-bg-800 border-gray-200">
+    <div class="card p-4 bg-bg-800 border-gray-200">
       <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
         Live Tools
         <span class="ml-auto kpi-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.5 1.5C9.84 1.5 8.5 2.84 8.5 4.5c0 .36.07.7.18 1.02L2.5 11.5a1.25 1.25 0 0 0 1.77 1.77l6-5.89c.31.11.65.18 1.02.18 1.66 0 3-1.34 3-3 0-.45-.1-.88-.27-1.27L12 5.5l-1.5-1.5 2.27-2.23C13.38 1.6 12.95 1.5 12.5 1.5z" stroke="#0891b2" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5C9.84 1.5 8.5 2.84 8.5 4.5c0 .36.07.7.18 1.02L2.5 11.5a1.25 1.25 0 0 0 1.77 1.77l6-5.89c.31.11.65.18 1.02.18 1.66 0 3-1.34 3-3 0-.45-.1-.88-.27-1.27L12 5.5l-1.5-1.5 2.27-2.23C13.38 1.6 12.95 1.5 12.5 1.5z" stroke="#0891b2" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
       </div>
-      <div class="text-3xl font-bold text-cyan-600" id="liveToolsCount">-</div>
+      <div class="text-3xl font-bold text-cyan-600" id="liveToolsCount">
+        <span class="skeleton block h-8 w-8"></span>
+      </div>
     </div>
-    <div class="card p-4 min-w-[150px] flex-1 bg-bg-800 border-gray-200">
+    <div class="card p-4 bg-bg-800 border-gray-200">
       <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
         Live Cost
         <span style="font-size:9px;background:#2a1e00;color:#d97706;border:1px solid #78350f;border-radius:4px;padding:1px 4px">API est.</span>
         <span class="ml-auto kpi-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6.5" stroke="#10b981" stroke-width="1.3"/><text x="8" y="11.8" text-anchor="middle" font-size="8.5" font-weight="700" fill="#10b981" font-family="sans-serif">$</text></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="#10b981" stroke-width="1.3"/><text x="8" y="11.8" text-anchor="middle" font-size="8.5" font-weight="700" fill="#10b981" font-family="sans-serif">$</text></svg>
         </span>
       </div>
-      <div class="text-3xl font-bold text-emerald-600" id="liveCost">-</div>
+      <div class="text-3xl font-bold text-emerald-600" id="liveCost">
+        <span class="skeleton block h-8 w-16"></span>
+      </div>
     </div>
-    <div class="card p-4 min-w-[150px] flex-1 bg-bg-800 border-gray-200">
+    <div class="card p-4 bg-bg-800 border-gray-200">
       <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider mb-2 flex items-center gap-2">
         Avg Turn
         <span class="ml-auto kpi-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="9" r="6" stroke="#eab308" stroke-width="1.3"/><path d="M8 6v3l2 1.2" stroke="#eab308" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="6" y1="1.5" x2="10" y2="1.5" stroke="#eab308" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="1.5" x2="8" y2="3" stroke="#eab308" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="9" r="6" stroke="#eab308" stroke-width="1.3"/><path d="M8 6v3l2 1.2" stroke="#eab308" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><line x1="6" y1="1.5" x2="10" y2="1.5" stroke="#eab308" stroke-width="1.3" stroke-linecap="round"/><line x1="8" y1="1.5" x2="8" y2="3" stroke="#eab308" stroke-width="1.3" stroke-linecap="round"/></svg>
         </span>
       </div>
-      <div class="text-3xl font-bold text-yellow-600" id="avgTurn">-</div>
+      <div class="text-3xl font-bold text-yellow-600" id="avgTurn">
+        <span class="skeleton block h-8 w-16"></span>
+      </div>
     </div>
   </div>
 
@@ -168,7 +195,7 @@ tailwind.config = {
       <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="2" y="1" width="9" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="4.5" x2="9" y2="4.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><line x1="4" y1="6.5" x2="9" y2="6.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><line x1="4" y1="8.5" x2="7" y2="8.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
       Live Sessions
     </h3>
-    <div class="card overflow-hidden">
+    <div class="card overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="text-left text-gray-500 text-xs uppercase tracking-wider">
           <tr class="border-b border-gray-200 bg-bg-700">
@@ -198,7 +225,7 @@ tailwind.config = {
         Active Agents
       </h3>
       <div id="liveAgentsGrid" class="grid grid-cols-1 gap-4">
-        <div class="text-gray-500 text-sm">Loading active agents...</div>
+        <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
       </div>
     </div>
 
@@ -207,11 +234,12 @@ tailwind.config = {
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5C9.84 1.5 8.5 2.84 8.5 4.5c0 .36.07.7.18 1.02L2.5 11.5a1.25 1.25 0 0 0 1.77 1.77l6-5.89c.31.11.65.18 1.02.18 1.66 0 3-1.34 3-3 0-.45-.1-.88-.27-1.27L12 5.5l-1.5-1.5 2.27-2.23C13.38 1.6 12.95 1.5 12.5 1.5z" stroke="#0891b2" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Live Tools
       </h3>
-      <div class="card overflow-hidden">
+      <div class="card overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="text-left text-gray-500 text-xs uppercase tracking-wider">
             <tr class="border-b border-gray-200 bg-bg-700">
               <th class="px-4 py-3">Tool</th>
+              <th class="px-4 py-3">Input</th>
               <th class="px-4 py-3">Project</th>
               <th class="px-4 py-3 text-right">Session</th>
               <th class="px-4 py-3 text-right">When</th>
@@ -227,13 +255,42 @@ tailwind.config = {
 
 <!-- SESSION HISTORY TAB -->
 <div id="panel-session_history" class="hidden fade-in">
-  <div class="card overflow-hidden">
+  <!-- Filter bar -->
+  <div class="flex items-center gap-2 mb-4 flex-wrap">
+    <input type="text" id="sh-search" placeholder="Search project, session ID..."
+      class="filter-input flex-1 min-w-[180px]" oninput="onSearchInput()">
+    <select id="sh-project" onchange="loadClosedSessions(true)" class="filter-input">
+      <option value="">All Projects</option>
+    </select>
+    <select id="sh-status" onchange="loadClosedSessions(true)" class="filter-input">
+      <option value="">All</option>
+      <option value="completed">Completed</option>
+      <option value="active">Active</option>
+    </select>
+    <select id="sh-sort" onchange="loadClosedSessions(true)" class="filter-input">
+      <option value="newest">Newest</option>
+      <option value="oldest">Oldest</option>
+      <option value="tokens">Most Tokens</option>
+      <option value="duration">Longest</option>
+    </select>
+    <button onclick="exportCSV()" class="text-gray-500 hover:text-emerald-400 transition text-sm mono border border-gray-300 rounded px-3 py-2 hover:border-emerald-400 shrink-0">↓ CSV</button>
+    <span id="session-count-display" class="text-xs text-gray-400 mono shrink-0"></span>
+  </div>
+  <!-- Compare selection bar -->
+  <div id="compare-selection-bar" class="hidden flex items-center gap-3 mb-3 p-2 rounded-lg text-sm" style="background:#1e2235;border:1px solid #252840">
+    <span id="compare-sel-count" class="text-gray-400 mono text-xs"></span>
+    <button onclick="runCompare()" class="px-3 py-1 rounded text-xs" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3)">Compare</button>
+    <button onclick="clearCompareSelection()" class="text-gray-500 hover:text-gray-300 text-xs">Clear</button>
+  </div>
+  <div class="card overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="text-left text-gray-500 text-xs uppercase tracking-wider">
         <tr class="border-b border-gray-200 bg-bg-700">
+          <th class="px-3 py-3 w-8"></th>
           <th class="px-4 py-3">Session</th>
           <th class="px-4 py-3">Project</th>
           <th class="px-4 py-3">Model</th>
+          <th class="px-4 py-3 text-right">Started</th>
           <th class="px-4 py-3 text-right">Duration</th>
           <th class="px-4 py-3 text-right">Tokens</th>
           <th class="px-4 py-3 text-right">Agent Cost</th>
@@ -247,18 +304,28 @@ tailwind.config = {
       <tbody id="closedSessionsBody" class="mono text-xs"></tbody>
     </table>
   </div>
+  <div id="session-history-load-more" class="hidden text-center mt-4">
+    <button onclick="loadMoreSessions()" class="text-sm mono border border-gray-300 rounded px-6 py-2 text-gray-500 hover:text-cyan-400 hover:border-cyan-400 transition">Load more</button>
+  </div>
 </div>
 
-<!-- HISTORY TAB -->
+<!-- STATS TAB -->
 <div id="panel-history" class="hidden fade-in">
   <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="7" width="2.5" height="6" rx="0.5" fill="#64748b"/><rect x="5.5" y="4" width="2.5" height="9" rx="0.5" fill="#64748b"/><rect x="10" y="1.5" width="2.5" height="11.5" rx="0.5" fill="#64748b"/></svg>
     Historical Overview
   </h3>
 
-  <div class="flex gap-4 mb-6 overflow-x-auto" id="historyCards">
-    <div class="text-gray-500 text-sm">Loading...</div>
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6" id="historyCards">
+    <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
+    <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
+    <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
+    <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
+    <div class="card p-4"><span class="skeleton block h-20 w-full"></span></div>
   </div>
+
+  <!-- Token Efficiency cards -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="efficiencyCards"></div>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     <div class="card p-4 col-span-1">
@@ -277,6 +344,13 @@ tailwind.config = {
   </div>
 
   <div class="card p-4 mb-6">
+    <h4 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Tool Error Rates</h4>
+    <div id="toolErrorsSection">
+      <div class="text-xs text-gray-400 py-4 text-center">No tool errors recorded.</div>
+    </div>
+  </div>
+
+  <div class="card p-4 mb-6">
     <h4 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Activity Heatmap (Sessions)</h4>
     <div id="heatmapContainer"></div>
   </div>
@@ -291,20 +365,18 @@ tailwind.config = {
         <svg width="20" height="20" viewBox="0 0 11 8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path fill="#D57858" d="M1 0h9v2h1v4H10v2H9V6H8v2H7V6H4v2H3V6H2v2H1V6H0V2h1V0z M2 2h1v1H2V2z M8 2h1v1H8V2z" fill-rule="evenodd"/></svg>
         Agents
       </h4>
-      <div id="agentsList" class="flex flex-col gap-3"><div class="text-gray-500 text-sm">Loading...</div></div>
+      <div id="agentsList" class="flex flex-col gap-3"><div class="card p-3"><span class="skeleton block h-12 w-full"></span></div></div>
     </div>
     <div class="flex flex-col gap-4">
       <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M11 2L3 12h7l-1 6 8-10h-7l1-6z" fill="#10b98122" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M11 2L3 12h7l-1 6 8-10h-7l1-6z" fill="#10b98122" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Skills
       </h4>
-      <div id="skillsList" class="flex flex-col gap-3"><div class="text-gray-500 text-sm">Loading...</div></div>
+      <div id="skillsList" class="flex flex-col gap-3"><div class="card p-3"><span class="skeleton block h-12 w-full"></span></div></div>
     </div>
     <div class="flex flex-col gap-4">
       <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <rect x="2" y="3" width="16" height="6" rx="2" stroke="#0891b2" stroke-width="1.4"/>
           <rect x="2" y="12" width="16" height="6" rx="2" stroke="#0891b2" stroke-width="1.4"/>
           <circle cx="15" cy="6" r="1.2" fill="#0891b2"/>
@@ -314,7 +386,7 @@ tailwind.config = {
         </svg>
         MCP Servers
       </h4>
-      <div id="mcpList" class="flex flex-col gap-3"><div class="text-gray-500 text-sm">Loading...</div></div>
+      <div id="mcpList" class="flex flex-col gap-3"><div class="card p-3"><span class="skeleton block h-12 w-full"></span></div></div>
     </div>
   </div>
 </div>
@@ -322,11 +394,23 @@ tailwind.config = {
 </main>
 </div><!-- end flex wrapper -->
 
+<!-- Compare Modal -->
+<div id="compare-modal" class="hidden fixed inset-0 z-50 flex items-start justify-center overflow-auto py-8" style="background:rgba(0,0,0,0.7)">
+  <div class="card w-full max-w-5xl mx-4 p-6" style="max-height:80vh;overflow-y:auto">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-semibold text-gray-900">Session Comparison</h3>
+      <button onclick="document.getElementById('compare-modal').classList.add('hidden')" class="text-gray-500 hover:text-gray-300 text-xl leading-none">✕</button>
+    </div>
+    <div id="compare-content" class="grid grid-cols-2 gap-4"></div>
+  </div>
+</div>
+
 <script>
 let charts = {};
+const selectedForCompare = new Set();
 
-// ── Robot avatar helpers ─────────────────────────────────────────────────────
-const AGENT_COLORS = ['#8b5cf6','#a78bfa','#7c3aed','#6d28d9','#c084fc'];
+// ── Agent helpers ─────────────────────────────────────────────────────────────
+const AGENT_COLORS = ['#f97316','#fb923c','#ea580c','#c2410c','#fbbf24'];
 
 function agentColor(name) {
   let h = 0;
@@ -342,10 +426,9 @@ function robotSVG(name, size) {
   </svg>`;
 }
 
-// ── Sleeping robot empty state ───────────────────────────────────────────────
 function sleepingRobotHTML() {
   return `<div class="flex flex-col items-center py-10 text-gray-400">
-    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
       <line x1="36" y1="5" x2="36" y2="13" stroke="#3a4060" stroke-width="2.5" stroke-linecap="round"/>
       <circle cx="36" cy="5" r="3.5" fill="#3a4060"/>
       <text x="44" y="15" fill="#3a4060" font-size="9" font-weight="bold" font-family="sans-serif">z</text>
@@ -362,7 +445,7 @@ function sleepingRobotHTML() {
   </div>`;
 }
 
-// ── Formatters ───────────────────────────────────────────────────────────────
+// ── Formatters ────────────────────────────────────────────────────────────────
 function fmt(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
@@ -388,12 +471,21 @@ function timeSince(iso) {
   const seconds = Math.floor((new Date() - new Date(iso)) / 1000);
   if (seconds < 60) return seconds + 's ago';
   const minutes = Math.floor(seconds / 60);
-  return minutes + 'm ago';
+  if (minutes < 60) return minutes + 'm ago';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours}h ${mins}m ago`;
+}
+
+function fmtTimestamp(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return d.toLocaleString('default', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function shortModel(m) {
   if (!m) return '-';
-  return m.replace('claude-', '').replace('-20250514', '').replace('-20250918', '');
+  return m.replace('claude-', '').replace(/-\d{8}$/, '');
 }
 
 function ctxColor(pct) {
@@ -402,14 +494,26 @@ function ctxColor(pct) {
   return '#06b6d4';
 }
 
+// ── Dark tooltip config for Chart.js ─────────────────────────────────────────
+const DARK_TOOLTIP = {
+  backgroundColor: '#1c1f30',
+  titleColor: '#c8d4e8',
+  bodyColor: '#9aaac0',
+  borderColor: '#252840',
+  borderWidth: 1,
+};
+
+// ── Tab management ────────────────────────────────────────────────────────────
 function showTab(name) {
   ['live_ops', 'session_history', 'history', 'resources'].forEach(t => {
     document.getElementById('panel-' + t).classList.toggle('hidden', t !== name);
     document.getElementById('tab-' + t).className = t === name ? 'sidebar-item active' : 'sidebar-item';
   });
-  if (name === 'session_history') loadClosedSessions();
+  localStorage.setItem('activeTab', name);
+  if (name === 'session_history') loadClosedSessions(true);
 }
 
+// ── Chart helpers ─────────────────────────────────────────────────────────────
 function renderDonut(canvasId, data, colors, labels) {
   if (charts[canvasId]) charts[canvasId].destroy();
   charts[canvasId] = new Chart(document.getElementById(canvasId), {
@@ -419,6 +523,7 @@ function renderDonut(canvasId, data, colors, labels) {
       maintainAspectRatio: false,
       cutout: '65%',
       plugins: {
+        tooltip: DARK_TOOLTIP,
         legend: { position: 'bottom', labels: { color: '#7a88a4', font: { size: 11, family: 'JetBrains Mono' }, padding: 12 } }
       }
     }
@@ -444,7 +549,7 @@ function renderLineChart(canvasId, labels, data, label, color) {
     },
     options: {
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, tooltip: DARK_TOOLTIP },
       scales: {
         x: { ticks: { color: '#505870', font: { size: 10 }, maxTicksLimit: 14 }, grid: { color: '#1c1f30' } },
         y: { ticks: { color: '#505870', font: { size: 10 }, callback: v => '$' + v.toFixed(2) }, grid: { color: '#1c1f30' } }
@@ -463,7 +568,7 @@ function renderBarChart(canvasId, labels, data, color) {
     },
     options: {
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false }, tooltip: DARK_TOOLTIP },
       scales: {
         x: { ticks: { color: '#505870', font: { size: 10, family: 'JetBrains Mono' } }, grid: { display: false } },
         y: { ticks: { color: '#505870', font: { size: 10 } }, grid: { color: '#1c1f30' } }
@@ -472,34 +577,90 @@ function renderBarChart(canvasId, labels, data, color) {
   });
 }
 
+// ── Calendar heatmap (GitHub-style 7×52) ──────────────────────────────────────
 function renderHeatmap(dailySessions) {
   const container = document.getElementById('heatmapContainer');
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
   const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - 364);
+  const endDate = new Date(today);
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 364);
+  // Align start to the beginning of that week (Sunday)
+  startDate.setDate(startDate.getDate() - startDate.getDay());
+
   const vals = Object.values(dailySessions);
   const maxVal = vals.length > 0 ? Math.max(...vals, 1) : 1;
-  let html = '<div class="flex gap-[3px] flex-wrap">';
-  for (let i = 0; i <= 364; i++) {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    const count = dailySessions[key] || 0;
-    const intensity = count / maxVal;
-    let bg;
-    if (count === 0) bg = '#1c1f30';
-    else if (intensity < 0.25) bg = '#cffafe';
-    else if (intensity < 0.5) bg = '#67e8f9';
-    else if (intensity < 0.75) bg = '#06b6d4';
-    else bg = '#0891b2';
-    html += `<div class="heatmap-cell" style="background:${bg}" title="${key}: ${count} sessions"></div>`;
+
+  // Build week columns
+  const weeks = [];
+  let cur = new Date(startDate);
+  while (cur <= endDate) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const key = cur.toISOString().slice(0, 10);
+      week.push({ key, count: dailySessions[key] || 0, date: new Date(cur) });
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(week);
   }
+
+  const nCols = weeks.length;
+
+  // Month labels
+  const monthLabels = new Array(nCols).fill('');
+  weeks.forEach((week, i) => {
+    const mon = week[0].date.toLocaleString('default', { month: 'short' });
+    const prev = i > 0 ? weeks[i - 1][0].date.toLocaleString('default', { month: 'short' }) : '';
+    if (mon !== prev) monthLabels[i] = mon;
+  });
+
+  const cellSize = 12;
+  const gap = 3;
+  const labelW = 28;
+  const colW = cellSize + gap;
+
+  let html = `<div style="overflow-x:auto"><div style="display:inline-block;padding-bottom:4px">`;
+
+  // Month label row
+  html += `<div style="display:flex;margin-bottom:3px;padding-left:${labelW}px">`;
+  weeks.forEach((_, i) => {
+    html += `<div style="width:${colW}px;font-size:9px;color:#505870;white-space:nowrap;overflow:visible">${monthLabels[i]}</div>`;
+  });
   html += '</div>';
+
+  // Day rows
+  for (let d = 0; d < 7; d++) {
+    const showLabel = [1, 3, 5].includes(d);
+    html += `<div style="display:flex;align-items:center;margin-bottom:${gap}px">`;
+    html += `<div style="width:${labelW}px;font-size:9px;color:#505870;text-align:right;padding-right:5px">${showLabel ? DAY_LABELS[d] : ''}</div>`;
+    weeks.forEach(week => {
+      const cell = week[d];
+      const intensity = cell.count / maxVal;
+      let bg;
+      if (cell.count === 0) bg = '#1c1f30';
+      else if (intensity < 0.25) bg = '#cffafe';
+      else if (intensity < 0.5) bg = '#67e8f9';
+      else if (intensity < 0.75) bg = '#06b6d4';
+      else bg = '#0891b2';
+      html += `<div style="width:${cellSize}px;height:${cellSize}px;border-radius:2px;background:${bg};margin-right:${gap}px;flex-shrink:0" title="${cell.key}: ${cell.count} session${cell.count !== 1 ? 's' : ''}"></div>`;
+    });
+    html += '</div>';
+  }
+
+  // Legend
+  html += `<div style="display:flex;align-items:center;gap:4px;margin-top:6px;padding-left:${labelW}px">
+    <span style="font-size:9px;color:#505870">Less</span>
+    ${['#1c1f30','#cffafe','#67e8f9','#06b6d4','#0891b2'].map(c => `<div style="width:12px;height:12px;border-radius:2px;background:${c}"></div>`).join('')}
+    <span style="font-size:9px;color:#505870">More</span>
+  </div>`;
+
+  html += '</div></div>';
   container.innerHTML = html;
 }
 
-// ── Shared session row renderer ──────────────────────────────────────────────
-function renderSessionRow(s) {
+// ── Session row renderer ──────────────────────────────────────────────────────
+function renderSessionRow(s, opts = {}) {
   const ctx = s.context_window || {};
   const ctxPct = ctx.utilization_pct || 0;
   const displayName = s.slug || s.session_id.substring(0, 8);
@@ -517,19 +678,33 @@ function renderSessionRow(s) {
       <span><span class="text-amber-500">cc</span> ${fmt(tok.cache_creation)}</span>
     </div>
   </div>`;
+
+  const withCheckbox = opts.withCheckbox || false;
+  const checkboxCell = withCheckbox
+    ? `<td class="px-3 py-2.5"><input type="checkbox" class="compare-check" value="${s.session_id}" onchange="onCompareCheck(this)" onclick="event.stopPropagation()" style="accent-color:#38bdf8"></td>`
+    : '';
+
+  const startedCell = withCheckbox
+    ? `<td class="px-4 py-2.5 text-right mono text-gray-500 text-[10px]">${fmtTimestamp(s.started_at)}</td>`
+    : '';
+
+  const colspan = withCheckbox ? 13 : 11;
+
   return `
     <tr class="border-b border-gray-200 expandable fade-in" onclick="toggleSessionDetail('${s.session_id}', this.querySelector('.expand-btn'))">
+      ${checkboxCell}
       <td class="px-4 py-2.5">
         <div class="flex items-center gap-1.5">
           <span class="expand-btn text-gray-300 text-xs w-3">▸</span>
           <span class="text-gray-700 mono text-xs" title="${s.session_id}">${displayName}</span>
         </div>
       </td>
-      <td class="px-4 py-2.5 text-cyan-600">${s.project}</td>
+      <td class="px-4 py-2.5 text-cyan-600 cursor-pointer hover:underline" onclick="event.stopPropagation();filterByProject('${s.project}')">${s.project}</td>
       <td class="px-4 py-2.5 text-gray-600 truncate max-w-[100px]" title="${s.model}">${shortModel(s.model)}</td>
+      ${startedCell}
       <td class="px-4 py-2.5 text-right mono text-gray-600">${s.duration_display}</td>
       <td class="px-4 py-2.5 mono text-gray-600 text-[10px]">${tokenCell}</td>
-      <td class="px-4 py-2.5 text-right mono ${s.subagent_cost > 0 ? 'text-fuchsia-600' : 'text-gray-300'}">${s.subagent_cost > 0 ? fmtCost(s.subagent_cost) : '—'}</td>
+      <td class="px-4 py-2.5 text-right mono ${s.subagent_cost > 0 ? '' : 'text-gray-300'}" style="${s.subagent_cost > 0 ? 'color:#f97316' : ''}">${s.subagent_cost > 0 ? fmtCost(s.subagent_cost) : '—'}</td>
       <td class="px-4 py-2.5 text-right mono text-cyan-700">${fmtCost(s.cost.total)}</td>
       <td class="px-4 py-2.5 text-right mono text-emerald-700">${fmtCost(s.cost.total + (s.subagent_cost || 0))}</td>
       <td class="px-4 py-2.5 text-right">${errBadge}</td>
@@ -542,79 +717,372 @@ function renderSessionRow(s) {
       <td class="px-4 py-2.5 text-right mono text-yellow-600">${fmtMs(s.last_turn_duration_ms)}</td>
     </tr>
     <tr id="detail-${s.session_id}" class="hidden detail-row border-b border-gray-100">
-      <tbody class="detail-content"><tr><td colspan="11"></td></tr></tbody>
+      <td colspan="${colspan}" class="detail-content p-0"></td>
     </tr>
   `;
 }
 
-// Session detail expand/collapse
+// ── Session detail expand/collapse ────────────────────────────────────────────
 function toggleSessionDetail(sessionId, btn) {
   const detailRow = document.getElementById('detail-' + sessionId);
   if (!detailRow) return;
   const isHidden = detailRow.classList.contains('hidden');
   detailRow.classList.toggle('hidden', !isHidden);
-  btn.textContent = isHidden ? '▾' : '▸';
+  if (btn) btn.textContent = isHidden ? '▾' : '▸';
   if (isHidden && detailRow.dataset.loaded !== 'true') {
     loadSessionDetail(sessionId, detailRow);
   }
 }
 
 async function loadSessionDetail(sessionId, row) {
-  row.querySelector('.detail-content').innerHTML = '<td colspan="11" class="px-6 py-3 text-gray-400 mono text-xs">Loading...</td>';
+  const td = row.querySelector('.detail-content');
+  td.innerHTML = '<div class="px-6 py-3 text-gray-400 mono text-xs"><span class="skeleton inline-block h-3 w-48"></span></div>';
   try {
     const res = await fetch('/api/sessions/' + sessionId);
     const s = await res.json();
     row.dataset.loaded = 'true';
     const tools = s.tool_calls || [];
-    if (tools.length === 0) {
-      row.querySelector('.detail-content').innerHTML = '<td colspan="11" class="px-6 py-3 text-gray-400 text-xs">No tool calls recorded.</td>';
-      return;
-    }
-    const rows = tools.slice(-30).reverse().map(t => `
+
+    const toolRows = tools.slice(-30).reverse().map(t => `
       <tr class="${t.is_error ? 'bg-red-50' : ''}">
         <td class="pl-10 pr-2 py-1 mono text-[10px] ${t.is_error ? 'text-red-600 font-bold' : 'text-cyan-700'}">${t.name}${t.is_error ? ' ⚠' : ''}</td>
-        <td class="px-2 py-1 text-gray-500 text-[10px] truncate max-w-[340px]" title="${t.input_data || ''}">${t.input_data || ''}</td>
-        <td class="px-2 py-1 text-gray-400 text-[10px] text-right">${timeSince(t.timestamp)}</td>
+        <td class="px-2 py-1 text-gray-500 text-[10px] truncate max-w-[340px]" title="${(t.input_data||'').replace(/"/g,'&quot;')}">${t.input_data || ''}</td>
+        <td class="px-2 py-1 text-gray-400 text-[10px] text-right mono">${fmtTimestamp(t.timestamp)}</td>
       </tr>
     `).join('');
-    row.querySelector('.detail-content').innerHTML = `
-      <td colspan="11" class="px-0 py-0">
-        <table class="w-full">
-          <thead><tr class="border-b" style="background:#1c1f30;border-color:#252840">
-            <th class="pl-10 pr-2 py-1.5 text-left text-[10px] text-gray-400 uppercase tracking-wider">Tool</th>
-            <th class="px-2 py-1.5 text-left text-[10px] text-gray-400 uppercase tracking-wider">Input</th>
-            <th class="px-2 py-1.5 text-right text-[10px] text-gray-400 uppercase tracking-wider">When</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="px-6 py-2 text-[10px] text-gray-400 border-t border-gray-100">
-          ${tools.length > 30 ? `Showing last 30 of ${tools.length} tool calls. ` : ''}
-          Cache hit: <span class="text-cyan-600 font-mono">${s.cache_hit_ratio}%</span>
-          · Avg turn: <span class="text-yellow-600 font-mono">${fmtMs(s.avg_turn_duration_ms)}</span>
-          · Errors: <span class="${s.tool_error_count > 0 ? 'text-red-500' : 'text-gray-400'} font-mono">${s.tool_error_count}</span>
-          · Branch: <span class="text-gray-500 font-mono">${s.branch || '-'}</span>
+
+    td.innerHTML = `
+      <div>
+        <div class="flex gap-5 px-6 pt-3 pb-0 border-b border-gray-200" style="background:#1a1d2e">
+          <button onclick="switchDetailTab('${sessionId}','tools',this)" class="detail-tab active">
+            Tool Calls (${tools.length})
+          </button>
+          <button onclick="switchDetailTab('${sessionId}','timeline',this)" class="detail-tab">
+            Timeline
+          </button>
+          <button onclick="switchDetailTab('${sessionId}','notes',this)" class="detail-tab">
+            Notes
+          </button>
         </div>
-      </td>
+        <div id="dtab-tools-${sessionId}">
+          ${tools.length === 0 ? '<div class="px-6 py-4 text-gray-400 text-xs">No tool calls recorded.</div>' : `
+          <table class="w-full">
+            <thead><tr style="background:#1c1f30;border-bottom:1px solid #252840">
+              <th class="pl-10 pr-2 py-1.5 text-left text-[10px] text-gray-400 uppercase tracking-wider">Tool</th>
+              <th class="px-2 py-1.5 text-left text-[10px] text-gray-400 uppercase tracking-wider">Input</th>
+              <th class="px-2 py-1.5 text-right text-[10px] text-gray-400 uppercase tracking-wider">When</th>
+            </tr></thead>
+            <tbody>${toolRows}</tbody>
+          </table>
+          <div class="px-6 py-2 text-[10px] text-gray-400 border-t border-gray-100">
+            ${tools.length > 30 ? `Last 30 of ${tools.length}. ` : ''}
+            Cache hit: <span class="text-cyan-600 font-mono">${s.cache_hit_ratio}%</span>
+            · Avg turn: <span class="text-yellow-600 font-mono">${fmtMs(s.avg_turn_duration_ms)}</span>
+            · Errors: <span class="${s.tool_error_count > 0 ? 'text-red-500' : 'text-gray-400'} font-mono">${s.tool_error_count}</span>
+            · Branch: <span class="text-gray-500 font-mono">${s.branch || '-'}</span>
+          </div>`}
+        </div>
+        <div id="dtab-timeline-${sessionId}" class="hidden">
+          <div class="px-6 py-4 text-gray-400 text-xs">Loading timeline...</div>
+        </div>
+        <div id="dtab-notes-${sessionId}" class="hidden">
+          <div class="px-6 py-4 text-gray-400 text-xs">Loading notes...</div>
+        </div>
+      </div>
     `;
   } catch (e) {
-    row.querySelector('.detail-content').innerHTML = '<td colspan="11" class="px-6 py-3 text-red-400 text-xs">Failed to load detail.</td>';
+    row.querySelector('.detail-content').innerHTML = '<div class="px-6 py-3 text-red-400 text-xs">Failed to load detail.</div>';
   }
 }
 
-async function loadDashboard() {
-  const [statsRes, sessionsRes] = await Promise.all([
-    fetch('/api/stats'),
-    fetch('/api/sessions?status=active&limit=100')
-  ]);
-  const stats = await statsRes.json();
-  const sessionsData = await sessionsRes.json();
+function switchDetailTab(sessionId, tab, btn) {
+  ['tools', 'timeline', 'notes'].forEach(t => {
+    const el = document.getElementById(`dtab-${t}-${sessionId}`);
+    if (el) el.classList.toggle('hidden', t !== tab);
+  });
+  btn.closest('.flex').querySelectorAll('.detail-tab').forEach(b => {
+    b.className = 'detail-tab';
+  });
+  btn.className = 'detail-tab active';
+  if (tab === 'timeline') loadTimeline(sessionId);
+  if (tab === 'notes') loadNotes(sessionId);
+}
 
+async function loadTimeline(sessionId) {
+  const el = document.getElementById(`dtab-timeline-${sessionId}`);
+  if (el.dataset.loaded) return;
+  try {
+    const res = await fetch('/api/sessions/' + sessionId + '/events');
+    const data = await res.json();
+    const events = (data.events || []).filter(e => e.event !== 'Unknown');
+    if (events.length === 0) {
+      el.innerHTML = '<div class="px-6 py-4 text-gray-400 text-xs">No events found.</div>';
+      return;
+    }
+    const EVENT_STYLES = {
+      'UserPrompt':    { color: '#38bdf8', icon: '↑', label: 'User' },
+      'AssistantMsg':  { color: '#34d399', icon: '↓', label: 'Claude' },
+      'ToolUse':       { color: '#06b6d4', icon: '⚙', label: 'Tool' },
+      'ToolResult':    { color: '#4a5568', icon: '✓', label: 'Result' },
+      'SubagentStart': { color: '#f97316', icon: '⬡', label: 'Agent' },
+      'SessionStart':  { color: '#a78bfa', icon: '◉', label: 'Start' },
+    };
+    const items = events.map(e => {
+      const st = EVENT_STYLES[e.event] || { color: '#7a88a4', icon: '•', label: e.event };
+      const preview = (e.preview || '').replace(/</g,'&lt;').replace(/>/g,'&gt;').substring(0, 140);
+      const time = e.timestamp ? new Date(e.timestamp).toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      return `<div class="flex gap-3 py-1.5 border-b border-gray-100 items-baseline">
+        <div class="shrink-0 w-14 text-right mono text-[9px] text-gray-500">${time}</div>
+        <div class="shrink-0 text-center text-[11px]" style="color:${st.color}">${st.icon}</div>
+        <div class="shrink-0 w-14 mono text-[9px]" style="color:${st.color}">${st.label}</div>
+        <div class="text-[10px] text-gray-500 truncate flex-1" title="${e.preview || ''}">${preview}</div>
+      </div>`;
+    }).join('');
+    el.innerHTML = `<div class="max-h-64 overflow-y-auto px-4 py-2">${items}</div>`;
+    el.dataset.loaded = 'true';
+  } catch (err) {
+    el.innerHTML = '<div class="px-6 py-4 text-red-400 text-xs">Failed to load timeline.</div>';
+  }
+}
+
+async function loadNotes(sessionId) {
+  const el = document.getElementById(`dtab-notes-${sessionId}`);
+  if (el.dataset.loaded) return;
+  try {
+    const res = await fetch('/api/sessions/' + sessionId + '/notes');
+    const data = await res.json();
+    el.innerHTML = `
+      <div class="px-6 py-4 space-y-3">
+        <div>
+          <label class="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">Note</label>
+          <textarea id="note-text-${sessionId}" rows="3" class="filter-input w-full resize-none" placeholder="Add a note about this session...">${data.note || ''}</textarea>
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-500 uppercase tracking-wider mb-1">Tags (comma-separated)</label>
+          <input id="note-tags-${sessionId}" type="text" value="${(data.tags || []).join(', ')}" class="filter-input w-full" placeholder="bug, refactor, important">
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="saveNote('${sessionId}')" class="text-sm px-4 py-1.5 rounded transition" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3)">Save</button>
+          <span id="note-saved-${sessionId}" class="hidden text-xs" style="color:#34d399">Saved!</span>
+        </div>
+      </div>`;
+    el.dataset.loaded = 'true';
+  } catch (err) {
+    el.innerHTML = '<div class="px-6 py-4 text-red-400 text-xs">Failed to load notes.</div>';
+  }
+}
+
+async function saveNote(sessionId) {
+  const note = document.getElementById(`note-text-${sessionId}`).value;
+  const tagsRaw = document.getElementById(`note-tags-${sessionId}`).value;
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  await fetch('/api/sessions/' + sessionId + '/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note, tags }),
+  });
+  const el = document.getElementById(`note-saved-${sessionId}`);
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 2000);
+}
+
+// ── Session comparison ────────────────────────────────────────────────────────
+function onCompareCheck(checkbox) {
+  if (checkbox.checked) selectedForCompare.add(checkbox.value);
+  else selectedForCompare.delete(checkbox.value);
+  const bar = document.getElementById('compare-selection-bar');
+  if (selectedForCompare.size >= 2) {
+    bar.classList.remove('hidden');
+    document.getElementById('compare-sel-count').textContent = `${selectedForCompare.size} sessions selected`;
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+function clearCompareSelection() {
+  selectedForCompare.clear();
+  document.querySelectorAll('.compare-check').forEach(cb => cb.checked = false);
+  document.getElementById('compare-selection-bar').classList.add('hidden');
+}
+
+async function runCompare() {
+  const ids = Array.from(selectedForCompare);
+  const modal = document.getElementById('compare-modal');
+  const content = document.getElementById('compare-content');
+  content.innerHTML = ids.map(() => '<div class="card p-4"><span class="skeleton block h-40 w-full"></span></div>').join('');
+  modal.classList.remove('hidden');
+  const sessions = await Promise.all(ids.map(id => fetch('/api/sessions/' + id).then(r => r.json())));
+  content.innerHTML = sessions.map(s => {
+    const ctx = s.context_window || {};
+    return `<div class="card p-4 space-y-2">
+      <div class="font-bold mono text-sm" style="color:#38bdf8">${s.slug || s.session_id.substring(0,8)}</div>
+      <div class="text-xs text-gray-500">${s.project} · ${shortModel(s.model)}</div>
+      <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-2">
+        <div class="text-gray-500">Duration</div><div class="mono text-gray-700">${s.duration_display}</div>
+        <div class="text-gray-500">Tokens</div><div class="mono text-gray-700">${fmt(s.tokens.total)}</div>
+        <div class="text-gray-500">Cost</div><div class="mono text-emerald-600">${fmtCost(s.cost.total)}</div>
+        <div class="text-gray-500">Tool Calls</div><div class="mono text-gray-700">${s.tool_call_count}</div>
+        <div class="text-gray-500">Errors</div><div class="mono ${s.tool_error_count > 0 ? 'text-red-500' : 'text-gray-400'}">${s.tool_error_count}</div>
+        <div class="text-gray-500">Cache Hit</div><div class="mono text-cyan-600">${s.cache_hit_ratio}%</div>
+        <div class="text-gray-500">Context</div><div class="mono" style="color:${ctxColor(ctx.utilization_pct||0)}">${ctx.utilization_pct||0}%</div>
+        <div class="text-gray-500">Avg Turn</div><div class="mono text-yellow-600">${fmtMs(s.avg_turn_duration_ms)}</div>
+        <div class="text-gray-500">Messages</div><div class="mono text-gray-700">${s.message_count}</div>
+        <div class="text-gray-500">Branch</div><div class="mono text-gray-500 truncate">${s.branch || '-'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Session History filter + pagination ───────────────────────────────────────
+let closedSessionsLoaded = false;
+let sessionOffset = 0;
+const SESSION_PAGE_SIZE = 50;
+let searchDebounce;
+
+function onSearchInput() {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => loadClosedSessions(true), 380);
+}
+
+function filterByProject(project) {
+  showTab('session_history');
+  const sel = document.getElementById('sh-project');
+  if (sel) {
+    // Ensure the option exists, then set it
+    let found = false;
+    for (const opt of sel.options) {
+      if (opt.value === project) { found = true; break; }
+    }
+    if (!found) {
+      const opt = new Option(project, project);
+      sel.add(opt);
+    }
+    sel.value = project;
+  }
+  loadClosedSessions(true);
+}
+
+async function loadClosedSessions(reset) {
+  if (reset) {
+    sessionOffset = 0;
+    closedSessionsLoaded = false;
+  }
+  const q = document.getElementById('sh-search')?.value || '';
+  const project = document.getElementById('sh-project')?.value || '';
+  const status = document.getElementById('sh-status')?.value || '';
+  const sort = document.getElementById('sh-sort')?.value || 'newest';
+
+  const params = new URLSearchParams({ sort, limit: SESSION_PAGE_SIZE, offset: sessionOffset });
+  if (q) params.set('q', q);
+  if (project) params.set('project', project);
+  if (status) params.set('status', status);
+
+  const body = document.getElementById('closedSessionsBody');
+  if (!body) return;
+  if (sessionOffset === 0) {
+    body.innerHTML = `<tr><td colspan="13" class="px-4 py-4 text-gray-400 mono text-xs"><span class="skeleton inline-block h-3 w-32"></span></td></tr>`;
+  }
+
+  try {
+    const res = await fetch('/api/sessions?' + params.toString());
+    const data = await res.json();
+    const sessions = data.sessions.filter(s => !s.is_subagent);
+
+    const countEl = document.getElementById('session-count-display');
+    if (countEl) countEl.textContent = `${data.total} sessions`;
+
+    if (sessionOffset === 0) {
+      body.innerHTML = sessions.length === 0
+        ? `<tr><td colspan="13" class="px-4 py-8 text-center text-gray-400 text-sm">No sessions found.</td></tr>`
+        : sessions.map(s => renderSessionRow(s, { withCheckbox: true })).join('');
+    } else {
+      if (sessions.length > 0) {
+        body.innerHTML += sessions.map(s => renderSessionRow(s, { withCheckbox: true })).join('');
+      }
+    }
+
+    const hasMore = (sessionOffset + SESSION_PAGE_SIZE) < data.total;
+    document.getElementById('session-history-load-more').classList.toggle('hidden', !hasMore);
+
+    sessionOffset += sessions.length;
+    closedSessionsLoaded = true;
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="13" class="px-4 py-4 text-red-400 text-xs">Failed to load sessions.</td></tr>`;
+  }
+}
+
+function loadMoreSessions() {
+  loadClosedSessions(false);
+}
+
+function exportCSV() {
+  const q = document.getElementById('sh-search')?.value || '';
+  const project = document.getElementById('sh-project')?.value || '';
+  const status = document.getElementById('sh-status')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (project) params.set('project', project);
+  if (status) params.set('status', status);
+  window.location.href = '/api/sessions/export.csv?' + params.toString();
+}
+
+// ── Main dashboard loader ─────────────────────────────────────────────────────
+async function loadDashboard(preloadedStats) {
+  try {
+    let stats;
+    if (preloadedStats) {
+      stats = preloadedStats;
+    } else {
+      const statsRes = await fetch('/api/stats');
+      stats = await statsRes.json();
+    }
+
+    const sessionsRes = await fetch('/api/sessions?status=active&limit=100');
+    const sessionsData = await sessionsRes.json();
+
+    applyStats(stats, sessionsData);
+  } catch (e) {
+    console.error('loadDashboard error', e);
+  }
+}
+
+function applyStats(stats, sessionsData) {
   const ops = stats.live_ops;
+
   document.getElementById('liveSessions').textContent = ops.active_sessions;
   document.getElementById('liveAgentsCount').textContent = ops.active_agents_count;
   document.getElementById('liveToolsCount').textContent = ops.active_tools;
   document.getElementById('liveCost').textContent = fmtCost(ops.live_cost);
   document.getElementById('avgTurn').textContent = fmtMs(ops.avg_turn_ms);
+
+  // Sidebar badge
+  const badge = document.getElementById('sidebar-live-badge');
+  if (ops.active_sessions > 0) {
+    badge.textContent = ops.active_sessions;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+
+  // Active sessions table
+  const activeSessions = (sessionsData?.sessions || []).filter(s => !s.is_subagent);
+  const sessionBody = document.getElementById('activeSessionsBody');
+  if (activeSessions.length === 0) {
+    sessionBody.innerHTML = '<tr><td colspan="11" class="px-4 py-4 text-gray-500">No active sessions.</td></tr>';
+  } else {
+    sessionBody.innerHTML = activeSessions.map(s => renderSessionRow(s)).join('');
+  }
+
+  // Context alert: check any session >= 80%
+  const highCtx = activeSessions.filter(s => (s.context_window?.utilization_pct || 0) >= 80);
+  const alertEl = document.getElementById('context-alert');
+  if (highCtx.length > 0) {
+    const s = highCtx[0];
+    const pct = s.context_window?.utilization_pct;
+    document.getElementById('context-alert-text').textContent =
+      `Context at ${pct}% for ${s.slug || s.session_id.substring(0, 8)} (${s.project}) — approaching limit`;
+    alertEl.classList.remove('hidden');
+  }
 
   // Active Agents grid
   const grid = document.getElementById('liveAgentsGrid');
@@ -622,12 +1090,12 @@ async function loadDashboard() {
     grid.innerHTML = sleepingRobotHTML();
   } else {
     grid.innerHTML = ops.active_agents.map(a => `
-      <div class="card p-4 border-l-4 border-l-fuchsia-500 hover:bg-bg-700 transition fade-in">
+      <div class="card p-4 hover:bg-bg-700 transition fade-in" style="border-left:3px solid ${agentColor(a.agent_id)}">
         <div class="flex items-start gap-3 mb-2">
           ${robotSVG(a.agent_id)}
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-start">
-              <div class="text-fuchsia-600 font-mono font-bold text-sm truncate pr-2" title="${a.agent_id}">${a.agent_id}</div>
+              <div class="font-mono font-bold text-sm truncate pr-2" style="color:#f97316" title="${a.agent_id}">${a.agent_id}</div>
               <div class="text-xs text-gray-400 shrink-0">${timeSince(a.timestamp)}</div>
             </div>
             <div class="flex items-center gap-2 mt-1">
@@ -646,9 +1114,9 @@ async function loadDashboard() {
   // Live Tools table
   const toolsBody = document.getElementById('liveToolsBody');
   if (ops.active_tools_list.length === 0) {
-    toolsBody.innerHTML = `<tr><td colspan="4" class="px-4 py-10 text-center">
+    toolsBody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center">
       <div class="flex flex-col items-center gap-2">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="opacity-30">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" class="opacity-30">
           <path d="M34 5C27.4 5 22 10.4 22 17c0 1.4.2 2.7.7 3.9L7 36.6a4 4 0 0 0 5.7 5.7L28 27c1.2.5 2.5.7 3.9.7C38.5 27.7 44 22.3 44 15.7V15c0-1.8-.4-3.5-1.2-5L37 15.5l-4-4 6.2-6.3C37.6 5.1 35.8 5 34 5z" stroke="#94a3b8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="text-gray-400 text-sm">No tools active</span>
@@ -659,8 +1127,8 @@ async function loadDashboard() {
       <tr class="border-b border-gray-200 hover:bg-bg-700 fade-in ${t.is_error ? 'bg-red-50' : ''}">
         <td class="px-4 py-2.5">
           <div class="${t.is_error ? 'text-red-600 font-bold' : 'text-cyan-600 font-bold'}">${t.name}${t.is_error ? ' ⚠' : ''}</div>
-          ${t.input_data ? `<div class="text-gray-400 text-[10px] mt-0.5 truncate max-w-[220px]" title="${t.input_data}">${t.input_data}</div>` : ''}
         </td>
+        <td class="px-4 py-2.5 text-gray-500 text-[10px] truncate max-w-[200px]" title="${t.input_data||''}">${t.input_data||''}</td>
         <td class="px-4 py-2.5 text-gray-600">${t.project}</td>
         <td class="px-4 py-2.5 text-right text-gray-400 mono">${t.session}</td>
         <td class="px-4 py-2.5 text-right text-gray-500">${timeSince(t.timestamp)}</td>
@@ -668,16 +1136,7 @@ async function loadDashboard() {
     `).join('');
   }
 
-  // Live Sessions table — filter subagents
-  const activeSessions = sessionsData.sessions.filter(s => !s.is_subagent);
-  const sessionBody = document.getElementById('activeSessionsBody');
-  if (activeSessions.length === 0) {
-    sessionBody.innerHTML = '<tr><td colspan="11" class="px-4 py-4 text-gray-500">No active sessions.</td></tr>';
-  } else {
-    sessionBody.innerHTML = activeSessions.map(renderSessionRow).join('');
-  }
-
-  // History cards with icons
+  // History / Stats tab
   const o = stats.overview;
   const totalAgents = Object.keys(stats.agent_teams.agents).length;
   const avgCost = o.total_sessions > 0 ? o.total_cost / o.total_sessions : 0;
@@ -687,54 +1146,70 @@ async function loadDashboard() {
       label: 'Total Sessions',
       value: fmt(o.total_sessions),
       sub: `+${o.total_subagent_sessions} subagents`,
-      color: 'text-cyan-600',
+      color: '#22d3ee',
       icon: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="2" width="16" height="14" rx="2.5" stroke="#0891b2" stroke-width="1.4"/><line x1="1" y1="7" x2="17" y2="7" stroke="#0891b2" stroke-width="1.4"/><polyline points="4,11 6,13 4,15" stroke="#0891b2" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><line x1="8" y1="15" x2="12" y2="15" stroke="#0891b2" stroke-width="1.4" stroke-linecap="round"/></svg>`
     },
     {
       label: 'Total Cost <span style="font-size:9px;background:#2a1e00;color:#d97706;border:1px solid #78350f;border-radius:4px;padding:1px 4px;font-family:DM Sans,sans-serif;text-transform:none;letter-spacing:normal">API est.</span>',
       value: fmtCost(o.total_cost),
       sub: `avg ${fmtCost(avgCost)}/session`,
-      color: 'text-emerald-600',
+      color: '#34d399',
       icon: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7.5" stroke="#10b981" stroke-width="1.4"/><text x="9" y="13" text-anchor="middle" font-size="9.5" font-weight="700" fill="#10b981" font-family="sans-serif">$</text></svg>`
     },
     {
       label: 'Tool Calls',
       value: fmt(o.total_tool_calls),
       sub: `${o.total_tool_errors} errors`,
-      color: 'text-yellow-600',
+      color: '#eab308',
       icon: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M13 2C11.07 2 9.5 3.57 9.5 5.5c0 .42.08.82.22 1.19L3.5 12.5a1.41 1.41 0 0 0 2 2l6-5.81c.37.14.77.22 1.19.22C14.93 9 16.5 7.43 16.5 5.5c0-.51-.11-1-.31-1.44L14 6.5l-1.5-1.5 2.44-2.69C14.5 2.1 13.8 2 13 2z" stroke="#eab308" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`
     },
     {
       label: 'Agents Deployed',
       value: fmt(totalAgents),
       sub: `${stats.agent_teams.total_dispatches} dispatches`,
-      color: 'text-fuchsia-600',
+      color: '#f97316',
       icon: `<svg width="18" height="18" viewBox="0 0 11 8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path fill="#D57858" d="M1 0h9v2h1v4H10v2H9V6H8v2H7V6H4v2H3V6H2v2H1V6H0V2h1V0z M2 2h1v1H2V2z M8 2h1v1H8V2z" fill-rule="evenodd"/></svg>`
     },
     {
       label: 'Cache Hit Ratio',
       value: o.cache_hit_ratio + '%',
       sub: 'input token reuse',
-      color: 'text-blue-600',
+      color: '#60a5fa',
       icon: `<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><ellipse cx="9" cy="5" rx="6" ry="2.2" stroke="#3b82f6" stroke-width="1.3"/><path d="M3 5v8c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2V5" stroke="#3b82f6" stroke-width="1.3"/><path d="M3 9c0 1.2 2.7 2.2 6 2.2s6-1 6-2.2" stroke="#3b82f6" stroke-width="1.3"/><path d="M10 8.5l-2 2.5h1.5L8.5 14l2.5-3H9.5L10 8.5z" fill="#3b82f6" opacity="0.8"/></svg>`
     },
   ];
 
   document.getElementById('historyCards').innerHTML = historyCardDefs.map(c => `
-    <div class="card p-4 min-w-[180px] flex-1 bg-bg-800 border-gray-200 fade-in">
+    <div class="card p-4 bg-bg-800 border-gray-200 fade-in">
       <div class="flex items-center justify-between mb-1">
         <div class="text-[11px] text-gray-500 font-mono uppercase tracking-wider">${c.label}</div>
         <div class="kpi-icon">${c.icon}</div>
       </div>
-      <div class="text-3xl font-bold ${c.color}">${c.value}</div>
+      <div class="text-3xl font-bold" style="color:${c.color}">${c.value}</div>
       <div class="text-[10px] text-gray-400 mt-1 mono">${c.sub}</div>
+    </div>
+  `).join('');
+
+  // Token efficiency cards
+  const outputPerMsg = o.total_messages > 0 ? Math.round(o.total_tokens / o.total_messages) : 0;
+  const costPerTool = o.total_tool_calls > 0 ? o.total_cost / o.total_tool_calls : 0;
+  const avgDuration = o.total_sessions > 0 ? (o.total_duration_hours * 3600) / o.total_sessions : 0;
+  document.getElementById('efficiencyCards').innerHTML = [
+    { label: 'Tokens / Message', value: fmt(outputPerMsg), color: '#38bdf8' },
+    { label: 'Cost / Tool Call', value: '$' + costPerTool.toFixed(4), color: '#34d399' },
+    { label: 'Avg Session Duration', value: avgDuration < 60 ? Math.round(avgDuration) + 's' : Math.round(avgDuration / 60) + 'm', color: '#eab308' },
+    { label: 'Hrs Coded', value: o.total_duration_hours + 'h', color: '#a78bfa' },
+  ].map(c => `
+    <div class="card p-3 bg-bg-800 fade-in">
+      <div class="text-[10px] text-gray-500 mono uppercase tracking-wider mb-1">${c.label}</div>
+      <div class="text-xl font-bold mono" style="color:${c.color}">${c.value}</div>
     </div>
   `).join('');
 
   // Model donut
   const modelLabels = Object.keys(stats.models.counts).map(shortModel);
   const modelData = Object.values(stats.models.counts);
-  const modelColors = ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
+  const modelColors = ['#06b6d4', '#f97316', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
   renderDonut('modelChart', modelData, modelColors.slice(0, modelData.length), modelLabels);
 
   // Daily cost chart — last 30 days
@@ -747,20 +1222,39 @@ async function loadDashboard() {
   const tf = stats.tool_frequency || {};
   const toolNames = Object.keys(tf);
   const toolCounts = Object.values(tf);
-  if (toolNames.length > 0) {
-    renderBarChart('toolFreqChart', toolNames, toolCounts, '#06b6d4');
+  if (toolNames.length > 0) renderBarChart('toolFreqChart', toolNames, toolCounts, '#06b6d4');
+
+  // Tool error analysis
+  const te = stats.tool_errors || {};
+  const errSection = document.getElementById('toolErrorsSection');
+  const errTools = Object.keys(te);
+  if (errTools.length === 0) {
+    errSection.innerHTML = '<div class="text-xs text-gray-400 py-4 text-center">No tool errors recorded.</div>';
+  } else {
+    errSection.innerHTML = '<div class="relative h-[160px]"><canvas id="toolErrorChart"></canvas></div>';
+    renderBarChart('toolErrorChart', errTools, Object.values(te), '#ef4444');
   }
 
   renderHeatmap(stats.daily.sessions);
+
+  // Populate project filter in session history
+  const projects = Object.keys(stats.projects || {});
+  const sel = document.getElementById('sh-project');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Projects</option>' +
+      projects.map(p => `<option value="${p}" ${p === cur ? 'selected' : ''}>${p}</option>`).join('');
+  }
 }
 
+// ── Resources ─────────────────────────────────────────────────────────────────
 async function loadResources() {
   try {
     const res = await fetch('/api/resources');
     const data = await res.json();
 
-    const renderCard = (item, colorClass) => `
-      <div class="card p-3 border-l-4 ${colorClass} hover:bg-bg-700 transition fade-in cursor-pointer" onclick="this.querySelector('.desc-panel').classList.toggle('hidden')">
+    const renderCard = (item, borderColor) => `
+      <div class="card p-3 hover:bg-bg-700 transition fade-in cursor-pointer" style="border-left:3px solid ${borderColor}" onclick="this.querySelector('.desc-panel').classList.toggle('hidden')">
         <div class="font-bold text-sm truncate pr-2" style="color:#dde3f0">${item.name}</div>
         <div class="text-xs mt-1 uppercase mono" style="color:#505870">${item.type}</div>
         <div class="desc-panel hidden mt-3 pt-3 text-xs whitespace-pre-wrap break-words" style="border-top:1px solid #252840;color:#8899b4">
@@ -769,65 +1263,104 @@ async function loadResources() {
       </div>
     `;
 
-    const mcpList = document.getElementById('mcpList');
-    mcpList.innerHTML = data.mcps.length === 0
+    document.getElementById('mcpList').innerHTML = data.mcps.length === 0
       ? '<div class="text-gray-500 text-sm">No MCP servers found.</div>'
-      : data.mcps.map(m => renderCard(m, 'border-l-cyan-500')).join('');
+      : data.mcps.map(m => renderCard(m, '#0891b2')).join('');
 
-    const skillsList = document.getElementById('skillsList');
-    skillsList.innerHTML = data.skills.length === 0
+    document.getElementById('skillsList').innerHTML = data.skills.length === 0
       ? '<div class="text-gray-500 text-sm">No Skills found.</div>'
-      : data.skills.map(s => renderCard(s, 'border-l-emerald-500')).join('');
+      : data.skills.map(s => renderCard(s, '#10b981')).join('');
 
-    const agentsList = document.getElementById('agentsList');
-    agentsList.innerHTML = data.agents.length === 0
+    document.getElementById('agentsList').innerHTML = data.agents.length === 0
       ? '<div class="text-gray-500 text-sm">No Agents found.</div>'
-      : data.agents.map(a => renderCard(a, 'border-l-fuchsia-500')).join('');
+      : data.agents.map(a => renderCard(a, '#f97316')).join('');
   } catch (err) {
-    console.error("Failed to load resources:", err);
+    console.error('Failed to load resources:', err);
   }
 }
 
-let closedSessionsLoaded = false;
-
-async function loadClosedSessions() {
-  const body = document.getElementById('closedSessionsBody');
-  if (!body) return;
-  if (!closedSessionsLoaded) {
-    body.innerHTML = '<tr><td colspan="11" class="px-4 py-4 text-gray-400 mono text-xs">Loading...</td></tr>';
-  }
-  try {
-    const res = await fetch('/api/sessions?status=completed&sort=newest&limit=50');
-    const data = await res.json();
-    const sessions = data.sessions.filter(s => !s.is_subagent);
-    if (sessions.length === 0) {
-      body.innerHTML = '<tr><td colspan="11" class="px-4 py-8 text-center text-gray-400 text-sm">No completed sessions yet.</td></tr>';
-    } else {
-      body.innerHTML = sessions.map(renderSessionRow).join('');
-    }
-    closedSessionsLoaded = true;
-  } catch (e) {
-    body.innerHTML = '<tr><td colspan="11" class="px-4 py-4 text-red-400 text-xs">Failed to load sessions.</td></tr>';
-  }
-}
-
+// ── Refresh ───────────────────────────────────────────────────────────────────
 function refreshAll() {
   loadDashboard();
   loadResources();
   if (!document.getElementById('panel-session_history').classList.contains('hidden')) {
-    loadClosedSessions();
+    closedSessionsLoaded = false;
+    loadClosedSessions(true);
   }
 }
 
+// ── WebSocket + polling fallback ──────────────────────────────────────────────
+let pollingInterval = null;
+let wsThrottle = 0;
+
+function startPolling() {
+  if (pollingInterval) return;
+  pollingInterval = setInterval(() => {
+    loadDashboard();
+    loadResources();
+    if (!document.getElementById('panel-session_history').classList.contains('hidden')) {
+      loadClosedSessions(true);
+    }
+  }, 30000);
+}
+
+function setupWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  let ws;
+  try {
+    ws = new WebSocket(`${protocol}//${location.host}/ws/live`);
+  } catch (e) {
+    startPolling();
+    return;
+  }
+  ws.onopen = () => {
+    if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+    document.getElementById('ws-indicator').textContent = '⬤ live';
+    document.getElementById('ws-indicator').style.color = '#34d399';
+  };
+  ws.onmessage = async (event) => {
+    const now = Date.now();
+    if (now - wsThrottle < 4500) return;
+    wsThrottle = now;
+    try {
+      const stats = JSON.parse(event.data);
+      const sessionsRes = await fetch('/api/sessions?status=active&limit=100');
+      const sessionsData = await sessionsRes.json();
+      applyStats(stats, sessionsData);
+    } catch (e) {}
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-indicator').textContent = '⬤ poll';
+    document.getElementById('ws-indicator').style.color = '#505870';
+    startPolling();
+    setTimeout(setupWebSocket, 6000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  const map = {
+    '1': 'live_ops',
+    '2': 'session_history',
+    '3': 'history',
+    '4': 'resources',
+  };
+  if (map[e.key]) { e.preventDefault(); showTab(map[e.key]); }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); refreshAll(); }
+  if (e.key === 'Escape') {
+    document.getElementById('compare-modal').classList.add('hidden');
+    document.getElementById('context-alert').classList.add('hidden');
+  }
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+const savedTab = localStorage.getItem('activeTab') || 'live_ops';
+showTab(savedTab);
 loadDashboard();
 loadResources();
-setInterval(() => {
-  loadDashboard();
-  loadResources();
-  if (!document.getElementById('panel-session_history').classList.contains('hidden')) {
-    loadClosedSessions();
-  }
-}, 30000);
+setupWebSocket();
 </script>
 </body>
 </html>

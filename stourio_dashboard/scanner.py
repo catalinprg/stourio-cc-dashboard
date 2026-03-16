@@ -192,11 +192,15 @@ class SessionScanner:
 
         # Tool frequency across all sessions
         tool_freq: dict[str, int] = defaultdict(int)
+        tool_error_counts: dict[str, int] = defaultdict(int)
         for s in sessions:
             for t in s.tool_calls:
                 if t.name not in ignored_tools and not t.name.startswith("toolu_"):
                     tool_freq[t.name] += 1
+                    if t.is_error:
+                        tool_error_counts[t.name] += 1
         top_tools = dict(sorted(tool_freq.items(), key=lambda x: x[1], reverse=True)[:20])
+        top_tool_errors = dict(sorted(tool_error_counts.items(), key=lambda x: x[1], reverse=True)[:15])
 
         # Cache efficiency
         total_cache_read = sum(s.tokens.cache_read_tokens for s in sessions)
@@ -247,6 +251,7 @@ class SessionScanner:
                 "agents": dict(sorted(agent_counts.items(), key=lambda x: x[1], reverse=True)),
             },
             "tool_frequency": top_tools,
+            "tool_errors": top_tool_errors,
         }
 
     def _empty_stats(self) -> dict:
@@ -259,4 +264,5 @@ class SessionScanner:
             "projects": {},
             "agent_teams": {"total_team_sessions": 0, "total_dispatches": 0, "agents": {}},
             "tool_frequency": {},
+            "tool_errors": {},
         }
