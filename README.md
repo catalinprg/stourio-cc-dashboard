@@ -9,7 +9,7 @@ Local observability dashboard for [Claude Code](https://docs.anthropic.com/en/do
 Navigation is a **left sidebar** with four sections: Live Ops, Session History, Stats, Resources. Dark mode UI throughout.
 
 ### 🟢 Live Ops (default view)
-Real-time view of what Claude Code is doing right now. Contains three sections:
+Real-time view of what Claude Code is doing right now. Updates via **WebSocket** (falls back to 30s polling, shown as `⬤ live` / `⬤ poll` indicator in the sidebar).
 
 **KPI bar** — Active Sessions, Live Agents, Live Tools, Live Cost (API estimate), Avg Turn Duration
 
@@ -20,16 +20,33 @@ Real-time view of what Claude Code is doing right now. Contains three sections:
 
 Click any row to expand and see the last 30 tool calls with inputs, error flags, cache hit ratio, and branch.
 
-**Active agents grid** — agent name (subagent type), task description, session slug, last turn duration
+**Context alert** — orange banner appears when any session reaches ≥80% context window utilization.
+
+**Active agents grid** — agent name (subagent type), task description, session slug, last turn duration. Agent badges use **orange** color (#f97316).
 
 **Live tools table** — every tool invocation as it happens, with the actual input (file path, bash command, search query, URL) shown inline. Error calls highlighted in red.
 
-### 📊 History & Stats
+### 📋 Session History
+Full paginated session list with server-side filtering and sorting.
+
+- **Filter bar** — search by slug/project/ID, filter by project, filter by status (all/active/completed), sort (newest/oldest/tokens/duration)
+- **Load More** pagination (100 sessions per page)
+- **CSV Export** — downloads filtered session list as `sessions.csv`
+- **Session detail drawer** — 3 tabs:
+  - **Tool Calls** — last 30 tool calls with inline input data and error flags
+  - **Timeline** — parsed event stream (UserPrompt, AssistantMsg, ToolUse, ToolResult, SubagentStart)
+  - **Notes** — freetext notes and tags, persisted to `~/.stourio-dashboard/session_notes.json`
+- **Session comparison** — select up to 2 sessions via checkboxes, click Compare to view side-by-side metrics in a modal
+
+### 📊 Stats
 - **Overview cards** — Total Sessions (+ subagent count), Total Cost (API est.), Tool Calls + error count, Agents deployed + dispatches, Cache Hit Ratio
+- **Token efficiency KPIs** — Tokens/Message, Cost/Tool Call, Avg Turn Duration, Hours Coded
 - **Model distribution** — doughnut chart across all sessions including subagents (Opus, Sonnet, Haiku)
 - **Daily Cost chart** — 30-day line chart of estimated API spend
 - **Tool Usage Frequency** — bar chart of most-used tools across all sessions
-- **Activity heatmap** — GitHub-style 365-day heatmap of session activity
+- **Tool Error Rates** — bar chart of per-tool error counts
+- **Activity heatmap** — GitHub-style 365-day heatmap of session activity, Monday-first, ISO week alignment
+- Project names are clickable throughout — click any project name to jump to Session History pre-filtered by that project
 
 ### 🛠️ Resources
 A dynamically updated library of all your installed Claude Code capabilities:
@@ -56,6 +73,7 @@ Every `.jsonl` session file in `~/.claude/projects/` is parsed for:
 | Cache hit ratio | `cache_read / (cache_read + input)` per session |
 | Context window % | Based on last turn's input tokens, not cumulative |
 | Subagent detection | Files under `subagents/` linked to parent session |
+| Session notes | Freetext notes/tags, stored separately from session data |
 
 > **Cost note:** Figures are API billing estimates. If you're on Claude Pro/Max, you are not charged per token — costs are shown for reference if you ever move to API billing.
 
@@ -85,6 +103,19 @@ python -m stourio_dashboard
 -o, --open         Open browser on start
 --version          Show version
 ```
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `1` | Live Ops |
+| `2` | Session History |
+| `3` | Stats |
+| `4` | Resources |
+| `r` | Refresh current tab |
+| `Esc` | Close open modals |
 
 ---
 
@@ -148,6 +179,7 @@ launchctl load ~/Library/LaunchAgents/com.stourio.dashboard.plist
 |---|---|
 | Session logs (read-only) | `~/.claude/projects/**/*.jsonl` |
 | Dashboard settings | `~/.stourio-dashboard/settings.json` |
+| Session notes | `~/.stourio-dashboard/session_notes.json` |
 | File cache | `~/.stourio-dashboard/cache/` |
 
 The scanner uses **mtime-based cache invalidation** — unchanged files are never re-parsed. Active sessions are always re-evaluated to detect the 15-minute idle timeout. Subagent JSONL files (under `subagents/`) are detected and linked to their parent session, preventing inflation of session counts and totals.
@@ -165,21 +197,25 @@ find ~/.claude/projects -type f -name "*.jsonl" -delete
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/sessions` | `GET` | List sessions — supports `q`, `project`, `model`, `status`, `sort`, `limit`, `offset` |
+| `/api/sessions/export.csv` | `GET` | Download filtered sessions as CSV — same filters as `/api/sessions` |
 | `/api/sessions/:id` | `GET` | Single session detail with full tool call list, cost breakdown, turn durations |
-| `/api/sessions/:id/events` | `GET` | Raw parsed events for a session |
+| `/api/sessions/:id/events` | `GET` | Raw parsed event timeline for a session |
+| `/api/sessions/:id/notes` | `GET` | Retrieve session notes and tags |
+| `/api/sessions/:id/notes` | `POST` | Save session notes and tags |
 | `/api/resources` | `GET` | Installed Claude Code MCPs, Agents, and Skills |
-| `/api/stats` | `GET` | Aggregate stats: live ops, overview, daily cost/tokens/sessions, tool frequency, model distribution, projects, agent teams |
+| `/api/stats` | `GET` | Aggregate stats: live ops, overview, daily cost/tokens/sessions, tool frequency, tool errors, model distribution, projects, agent teams |
 | `/api/projects` | `GET` | Per-project metrics |
 | `/api/settings` | `GET` | Dashboard settings + available models |
 | `/api/settings` | `POST` | Update settings |
 | `/api/health` | `GET` | Health check |
+| `/ws/live` | `WebSocket` | Push stats every 5s |
 
 ---
 
 ## Stack
 
 - **Python 3.10+**
-- **FastAPI** + **Uvicorn** — async HTTP server
+- **FastAPI** + **Uvicorn** — async HTTP server with WebSocket support
 - **Jinja2** — template rendering
 - **orjson** — fast JSON parsing for `.jsonl` session files
 - **Click** — CLI interface
