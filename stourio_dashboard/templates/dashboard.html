@@ -504,12 +504,16 @@ const DARK_TOOLTIP = {
 };
 
 // ── Tab management ────────────────────────────────────────────────────────────
-function showTab(name) {
+function switchTabUI(name) {
   ['live_ops', 'session_history', 'history', 'resources'].forEach(t => {
     document.getElementById('panel-' + t).classList.toggle('hidden', t !== name);
     document.getElementById('tab-' + t).className = t === name ? 'sidebar-item active' : 'sidebar-item';
   });
   localStorage.setItem('activeTab', name);
+}
+
+function showTab(name) {
+  switchTabUI(name);
   if (name === 'session_history') loadClosedSessions(true);
 }
 
@@ -580,14 +584,14 @@ function renderBarChart(canvasId, labels, data, color) {
 // ── Calendar heatmap (GitHub-style 7×52) ──────────────────────────────────────
 function renderHeatmap(dailySessions) {
   const container = document.getElementById('heatmapContainer');
-  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const today = new Date();
   const endDate = new Date(today);
   const startDate = new Date(today);
   startDate.setDate(startDate.getDate() - 364);
-  // Align start to the beginning of that week (Sunday)
-  startDate.setDate(startDate.getDate() - startDate.getDay());
+  // Align start to the beginning of that week (Monday)
+  startDate.setDate(startDate.getDate() - (startDate.getDay() + 6) % 7);
 
   const vals = Object.values(dailySessions);
   const maxVal = vals.length > 0 ? Math.max(...vals, 1) : 1;
@@ -631,7 +635,7 @@ function renderHeatmap(dailySessions) {
 
   // Day rows
   for (let d = 0; d < 7; d++) {
-    const showLabel = [1, 3, 5].includes(d);
+    const showLabel = [0, 2, 4].includes(d);
     html += `<div style="display:flex;align-items:center;margin-bottom:${gap}px">`;
     html += `<div style="width:${labelW}px;font-size:9px;color:#505870;text-align:right;padding-right:5px">${showLabel ? DAY_LABELS[d] : ''}</div>`;
     weeks.forEach(week => {
@@ -938,6 +942,7 @@ let closedSessionsLoaded = false;
 let sessionOffset = 0;
 const SESSION_PAGE_SIZE = 50;
 let searchDebounce;
+let sessionHistoryAbort = null;  // AbortController for in-flight session history fetch
 
 function onSearchInput() {
   clearTimeout(searchDebounce);
@@ -945,7 +950,7 @@ function onSearchInput() {
 }
 
 function filterByProject(project) {
-  showTab('session_history');
+  switchTabUI('session_history');  // switch UI only — no loadClosedSessions triggered
   const sel = document.getElementById('sh-project');
   if (sel) {
     // Ensure the option exists, then set it
@@ -963,6 +968,11 @@ function filterByProject(project) {
 }
 
 async function loadClosedSessions(reset) {
+  // Cancel any previous in-flight fetch
+  if (sessionHistoryAbort) sessionHistoryAbort.abort();
+  sessionHistoryAbort = new AbortController();
+  const signal = sessionHistoryAbort.signal;
+
   if (reset) {
     sessionOffset = 0;
     closedSessionsLoaded = false;
@@ -984,7 +994,8 @@ async function loadClosedSessions(reset) {
   }
 
   try {
-    const res = await fetch('/api/sessions?' + params.toString());
+    const res = await fetch('/api/sessions?' + params.toString(), { signal });
+    if (signal.aborted) return;
     const data = await res.json();
     const sessions = data.sessions.filter(s => !s.is_subagent);
 
@@ -1007,6 +1018,7 @@ async function loadClosedSessions(reset) {
     sessionOffset += sessions.length;
     closedSessionsLoaded = true;
   } catch (e) {
+    if (e.name === 'AbortError') return;  // superseded by a newer call, discard
     body.innerHTML = `<tr><td colspan="13" class="px-4 py-4 text-red-400 text-xs">Failed to load sessions.</td></tr>`;
   }
 }

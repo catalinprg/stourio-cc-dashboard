@@ -31,7 +31,10 @@ if STATIC_DIR.exists():
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_file = TEMPLATES_DIR / "dashboard.html"
-    return HTMLResponse(html_file.read_text())
+    return HTMLResponse(
+        html_file.read_text(),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/sessions/export.csv")
