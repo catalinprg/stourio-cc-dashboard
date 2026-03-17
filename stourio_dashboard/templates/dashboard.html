@@ -240,6 +240,7 @@ tailwind.config = {
             <tr class="border-b border-gray-200 bg-bg-700">
               <th class="px-4 py-3">Tool</th>
               <th class="px-4 py-3">Input</th>
+              <th class="px-4 py-3">By</th>
               <th class="px-4 py-3">Project</th>
               <th class="px-4 py-3 text-right">Session</th>
               <th class="px-4 py-3 text-right">When</th>
@@ -1126,7 +1127,7 @@ function applyStats(stats, sessionsData) {
   // Live Tools table
   const toolsBody = document.getElementById('liveToolsBody');
   if (ops.active_tools_list.length === 0) {
-    toolsBody.innerHTML = `<tr><td colspan="5" class="px-4 py-10 text-center">
+    toolsBody.innerHTML = `<tr><td colspan="6" class="px-4 py-10 text-center">
       <div class="flex flex-col items-center gap-2">
         <svg width="48" height="48" viewBox="0 0 48 48" fill="none" class="opacity-30">
           <path d="M34 5C27.4 5 22 10.4 22 17c0 1.4.2 2.7.7 3.9L7 36.6a4 4 0 0 0 5.7 5.7L28 27c1.2.5 2.5.7 3.9.7C38.5 27.7 44 22.3 44 15.7V15c0-1.8-.4-3.5-1.2-5L37 15.5l-4-4 6.2-6.3C37.6 5.1 35.8 5 34 5z" stroke="#94a3b8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1135,17 +1136,24 @@ function applyStats(stats, sessionsData) {
       </div>
     </td></tr>`;
   } else {
-    toolsBody.innerHTML = ops.active_tools_list.map(t => `
+    toolsBody.innerHTML = ops.active_tools_list.map(t => {
+      const isAgent = t.by && t.by !== 'main';
+      const byLabel = t.by || 'main';
+      const byStyle = isAgent
+        ? 'background:#2a1a00;color:#f97316;border:1px solid #78350f;border-radius:4px;padding:1px 5px;font-size:10px'
+        : 'color:#6b7280;font-size:10px';
+      return `
       <tr class="border-b border-gray-200 hover:bg-bg-700 fade-in ${t.is_error ? 'bg-red-50' : ''}">
         <td class="px-4 py-2.5">
           <div class="${t.is_error ? 'text-red-600 font-bold' : 'text-cyan-600 font-bold'}">${t.name}${t.is_error ? ' ⚠' : ''}</div>
         </td>
         <td class="px-4 py-2.5 text-gray-500 text-[10px] truncate max-w-[200px]" title="${t.input_data||''}">${t.input_data||''}</td>
+        <td class="px-4 py-2.5"><span style="${byStyle}">${byLabel}</span></td>
         <td class="px-4 py-2.5 text-gray-600">${t.project}</td>
         <td class="px-4 py-2.5 text-right text-gray-400 mono">${t.session}</td>
         <td class="px-4 py-2.5 text-right text-gray-500">${timeSince(t.timestamp)}</td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   }
 
   // History / Stats tab

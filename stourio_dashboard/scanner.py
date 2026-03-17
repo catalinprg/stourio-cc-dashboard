@@ -92,6 +92,15 @@ class SessionScanner:
                 return s
         return None
 
+    @staticmethod
+    def _short_model(model: str) -> str:
+        """claude-sonnet-4-6 -> sonnet-4-6"""
+        if not model:
+            return ""
+        if "claude-" in model:
+            return model.split("claude-", 1)[1]
+        return model
+
     def get_stats(self) -> dict:
         sessions = self.scan_all()
         if not sessions:
@@ -107,6 +116,13 @@ class SessionScanner:
         live_tools_raw = []
         live_agents_list = []
         live_session_ids = {s.session_id for s in live_sessions}
+
+        # Build map: parent_session_id -> list of subagent sessions
+        subagent_map: dict[str, list[SessionSummary]] = defaultdict(list)
+        for s in sessions:
+            if s.is_subagent and s.parent_session_id:
+                subagent_map[s.parent_session_id].append(s)
+
         live_subagent_cost = sum(
             s.cost.total for s in sessions
             if s.is_subagent and s.parent_session_id in live_session_ids
@@ -115,25 +131,46 @@ class SessionScanner:
 
         for s in live_sessions:
             short_id = s.session_id[:8]
+            session_label = s.slug or short_id
             live_cost += s.cost.total
+
+            # Main session tools
             for t in s.tool_calls:
                 if t.name not in ignored_tools and not t.name.startswith("toolu_"):
                     live_tools_raw.append({
                         "name": t.name,
                         "project": s.project,
-                        "session": s.slug or short_id,
+                        "session": session_label,
+                        "by": "main",
                         "timestamp": t.timestamp,
                         "input_data": t.input_data,
                         "is_error": t.is_error,
                     })
                     live_tools_count += 1
 
+            # Subagent session tools — include with labeling
+            live_subagents = subagent_map.get(s.session_id, [])
+            for sub in live_subagents:
+                sub_label = self._short_model(sub.model) or sub.session_id[:8]
+                for t in sub.tool_calls:
+                    if t.name not in ignored_tools and not t.name.startswith("toolu_"):
+                        live_tools_raw.append({
+                            "name": t.name,
+                            "project": s.project,
+                            "session": session_label,
+                            "by": sub_label,
+                            "timestamp": t.timestamp,
+                            "input_data": t.input_data,
+                            "is_error": t.is_error,
+                        })
+                        live_tools_count += 1
+
             for a in s.agent_dispatches:
                 live_agents_list.append({
                     "agent_id": a.agent_id,
                     "task": a.task,
                     "project": s.project,
-                    "session_id": s.slug or short_id,
+                    "session_id": session_label,
                     "timestamp": a.timestamp,
                     "last_turn_ms": s.last_turn_duration_ms,
                 })

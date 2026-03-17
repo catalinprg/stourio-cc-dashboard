@@ -105,8 +105,8 @@ class SessionSummary:
 
     def to_dict(self) -> dict:
         # Context window: use last turn's input tokens (actual current context fill)
-        ctx_used = self.last_input_tokens or (self.tokens.input_tokens + self.tokens.cache_read_tokens)
-        ctx_pct = round(ctx_used / self.context_window_max * 100, 1) if self.context_window_max else 0
+        ctx_used = self.last_input_tokens
+        ctx_pct = round(ctx_used / self.context_window_max * 100, 1) if self.context_window_max and ctx_used else 0
 
         return {
             "session_id": self.session_id,

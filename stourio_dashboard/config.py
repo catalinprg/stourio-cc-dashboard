@@ -21,8 +21,8 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
 CONTEXT_WINDOWS: dict[str, int] = {
-    "claude-opus-4-6": 200000,
-    "claude-sonnet-4-6": 200000,
+    "claude-opus-4-6": 1000000,
+    "claude-sonnet-4-6": 1000000,
     "claude-haiku-4-5": 200000,
 }
 
@@ -39,6 +39,9 @@ def get_pricing(model: str) -> dict[str, float]:
 def get_context_window(model: str) -> int:
     if model in CONTEXT_WINDOWS:
         return CONTEXT_WINDOWS[model]
+    for key, window in CONTEXT_WINDOWS.items():
+        if key in model or model in key:
+            return window
     return 200000
 
 
