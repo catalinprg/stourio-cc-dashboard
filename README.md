@@ -121,7 +121,7 @@ python -m stourio_dashboard
 
 ## Run as Always-On Service (macOS)
 
-Create a LaunchAgent to keep the dashboard running in the background:
+Create a LaunchAgent to keep the dashboard running in the background. Verify the binary path first with `which stourio-dashboard` and update the plist accordingly.
 
 ```bash
 cat << 'EOF' > ~/Library/LaunchAgents/com.stourio.dashboard.plist
@@ -133,7 +133,7 @@ cat << 'EOF' > ~/Library/LaunchAgents/com.stourio.dashboard.plist
     <string>com.stourio.dashboard</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Library/Frameworks/Python.framework/Versions/3.14/bin/stourio-dashboard</string>
+        <string>/usr/local/bin/stourio-dashboard</string>
         <string>-p</string>
         <string>3000</string>
     </array>
