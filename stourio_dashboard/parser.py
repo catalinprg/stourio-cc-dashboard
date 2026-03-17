@@ -331,14 +331,24 @@ def parse_session_file(filepath: Path, project_name: str) -> Optional[SessionSum
     elif time_since_last_event < 900:
         is_active = True
 
-    cost = compute_cost(tokens, model or "claude-sonnet-4-6")
+    # Resolve synthetic/placeholder model names to the actual model used
+    real_model = model
+    if not model or model.startswith("<"):
+        for m in sorted(models_used):
+            if not m.startswith("<"):
+                real_model = m
+                break
+        else:
+            real_model = model or "claude-sonnet-4-6"
+
+    cost = compute_cost(tokens, real_model)
 
     return SessionSummary(
         session_id=session_id,
         project=project_name,
         project_path=project_path,
         branch=branch,
-        model=model,
+        model=real_model,
         slug=slug,
         version=version,
         status="active" if is_active else "completed",
@@ -353,7 +363,7 @@ def parse_session_file(filepath: Path, project_name: str) -> Optional[SessionSum
         cost=cost,
         tool_calls=tool_calls,
         agent_dispatches=agent_dispatches,
-        context_window_max=get_context_window(model),
+        context_window_max=get_context_window(real_model),
         models_used=sorted(models_used),
         turn_durations=turn_durations,
         file_path=str(filepath),
