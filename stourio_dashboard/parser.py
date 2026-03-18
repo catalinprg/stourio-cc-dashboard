@@ -313,8 +313,8 @@ def parse_session_file(filepath: Path, project_name: str) -> Optional[SessionSum
             branch = branch or meta.get("branch", "") or meta.get("git_branch", "")
             project_path = project_path or meta.get("project_path", "") or meta.get("cwd", "")
 
-    # Drop pure phantom windows immediately
-    if human_count == 0 and tokens.total == 0:
+    # Drop empty sessions: no tokens, no tool calls, no meaningful activity
+    if tokens.total == 0 and len(tool_calls) == 0:
         return None
 
     started = min(timestamps) if timestamps else None
